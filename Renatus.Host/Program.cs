@@ -3,6 +3,7 @@ using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Service;
 using Renatus.Host.Service.Cache;
+using Renatus.Host.Util;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +21,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DbSeed.InitializeAsync(dbContext);
+}
 
 app.Use(async (context, next) =>
 {

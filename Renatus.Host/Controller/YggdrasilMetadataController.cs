@@ -7,7 +7,6 @@ namespace Renatus.Host.Controller;
 public sealed class YggdrasilMetadataController(YggdrasilService yggdrasilService) : ControllerBase
 {
     [HttpGet("")]
-    [HttpGet("/api/yggdrasil/")]
     public IActionResult Root()
     {
         return Ok(yggdrasilService.GetMetadata());

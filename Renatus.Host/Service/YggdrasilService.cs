@@ -136,6 +136,7 @@ public sealed partial class YggdrasilService(
     {
         var normalizedLogin = YggdrasilFormat.Normalize(login);
         Player? selectedPlayer = await dbContext.Players
+            .AsSplitQuery()
             .Include(player => player.User)
             .ThenInclude(user => user.AuthenticationMethods)
             .Include(player => player.User)
@@ -146,6 +147,7 @@ public sealed partial class YggdrasilService(
         if (user is null)
         {
             user = await dbContext.Users
+                .AsSplitQuery()
                 .Include(entity => entity.AuthenticationMethods)
                 .Include(entity => entity.Players)
                 .FirstOrDefaultAsync(
