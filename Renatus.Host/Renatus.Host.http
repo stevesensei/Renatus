@@ -1,0 +1,6 @@
+@Renatus.Host_HostAddress = http://localhost:5294
+
+GET {{Renatus.Host_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

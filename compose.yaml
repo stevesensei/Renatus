@@ -1,0 +1,7 @@
+﻿services:
+  renatus.host:
+    image: renatus.host
+    build:
+      context: .
+      dockerfile: Renatus.Host/Dockerfile
+
