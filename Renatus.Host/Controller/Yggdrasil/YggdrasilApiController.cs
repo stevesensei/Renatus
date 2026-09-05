@@ -3,7 +3,7 @@ using Renatus.Host.Data;
 using Renatus.Host.Service;
 using Renatus.Host.Utils;
 
-namespace Renatus.Host.Controller;
+namespace Renatus.Host.Controller.Yggdrasil;
 
 [Route("api/yggdrasil/api")]
 public sealed class YggdrasilApiController(YggdrasilService yggdrasilService) : YggdrasilControllerBase

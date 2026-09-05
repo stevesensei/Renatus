@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Renatus.Host.Service;
 using Renatus.Host.Utils;
 
-namespace Renatus.Host.Controller;
+namespace Renatus.Host.Controller.Yggdrasil;
 
 [ApiController]
 public abstract class YggdrasilControllerBase : ControllerBase

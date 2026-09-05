@@ -4,7 +4,7 @@ using Renatus.Host.Data;
 using Renatus.Host.Entity;
 using Renatus.Host.Service;
 
-namespace Renatus.Host.Util;
+namespace Renatus.Host.Utils;
 
 public static class DbSeed
 {
@@ -54,7 +54,8 @@ public static class DbSeed
             NickName = "Test User",
             Email = "test@example.com",
             NormalizedEmail = YggdrasilFormat.Normalize("test@example.com"),
-            PreferredLanguage = "zh_CN"
+            PreferredLanguage = "zh_CN",
+            Role = UserRole.Player
         };
 
         var authenticationMethod = new UserAuthenticationMethod

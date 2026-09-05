@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.30" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.30"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.30" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.30">
@@ -27,7 +28,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Controller\" />
       <Folder Include="Data\Migrations\" />
       <Folder Include="Entity\" />
       <Folder Include="Service\" />

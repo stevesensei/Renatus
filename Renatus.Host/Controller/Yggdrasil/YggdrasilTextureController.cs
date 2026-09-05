@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Renatus.Host.Service;
 
-namespace Renatus.Host.Controller;
+namespace Renatus.Host.Controller.Yggdrasil;
 
 [Route("api/yggdrasil/textures")]
 public sealed class YggdrasilTextureController(YggdrasilService yggdrasilService) : ControllerBase
