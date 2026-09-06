@@ -4,63 +4,63 @@
 @using System.Buffers.Binary
 @using Microsoft.Extensions.Options
 
-<PageTitle>@FrontLabels.Textures</PageTitle>
+<PageTitle>@L["textures.title"]</PageTitle>
 
 <MudStack Spacing="3">
     <div>
-        <MudText Typo="Typo.h4">@FrontLabels.Textures</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">@FrontLabels.TextureDescription</MudText>
+        <MudText Typo="Typo.h4">@L["textures.title"]</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@L["textures.description"]</MudText>
     </div>
 
     <MudPaper id="textures" Class="pa-4" Elevation="1">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.h6">@FrontLabels.UploadTexture</MudText>
-            <MudSelect T="TextureType" Label="@FrontLabels.TextureType" @bind-Value="_textureType" @bind-Value:after="RevalidateSelectedFileAsync" Required="true">
-                <MudSelectItem Value="TextureType.Skin">Skin</MudSelectItem>
-                <MudSelectItem Value="TextureType.Cape">@FrontLabels.Cape</MudSelectItem>
+            <MudText Typo="Typo.h6">@L["textures.upload"]</MudText>
+            <MudSelect T="TextureType" Label='@L["textures.type"]' @bind-Value="_textureType" @bind-Value:after="RevalidateSelectedFileAsync" Required="true">
+                <MudSelectItem Value="TextureType.Skin">@L["textures.skin"]</MudSelectItem>
+                <MudSelectItem Value="TextureType.Cape">@L["textures.cape"]</MudSelectItem>
             </MudSelect>
             @if (_textureType == TextureType.Skin)
             {
-                <MudSelect T="SkinModel" Label="Skin model" @bind-Value="_skinModel" Required="true">
-                    <MudSelectItem Value="SkinModel.Default">Default</MudSelectItem>
-                    <MudSelectItem Value="SkinModel.Slim">Slim</MudSelectItem>
+                <MudSelect T="SkinModel" Label='@L["textures.skinModel"]' @bind-Value="_skinModel" Required="true">
+                    <MudSelectItem Value="SkinModel.Default">@L["textures.default"]</MudSelectItem>
+                    <MudSelectItem Value="SkinModel.Slim">@L["textures.slim"]</MudSelectItem>
                 </MudSelect>
             }
-            <MudCheckBox @bind-Value="_isPublic" Label="@FrontLabels.PublicTexture" Color="Color.Primary" />
+            <MudCheckBox @bind-Value="_isPublic" Label='@L["textures.public"]' Color="Color.Primary" />
             <MudFileUpload T="IBrowserFile" Accept=".png,image/png" MaximumFileCount="1" MaxFileSize="MaxRawFileSize" OnFilesChanged="HandleFileSelected">
                 <CustomContent>
                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@context.OpenFilePickerAsync" StartIcon="@Icons.Material.Filled.UploadFile">
-                        @FrontLabels.ChoosePng
+                        @L["textures.choosePng"]
                     </MudButton>
                 </CustomContent>
             </MudFileUpload>
             @if (_selectedFile is not null)
             {
-                <MudText Typo="Typo.body2">Selected: @_selectedFile.Name (@FormatBytes(_selectedFile.Size))</MudText>
+                <MudText Typo="Typo.body2">@L["textures.selected"]: @_selectedFile.Name (@FormatBytes(_selectedFile.Size))</MudText>
             }
             @if (_validationMessage is not null)
             {
-                <MudAlert Severity="Severity.Error" Dense="true">@_validationMessage</MudAlert>
+                <MudAlert Severity="Severity.Error" Dense="true" aria-live="polite">@_validationMessage</MudAlert>
             }
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_selectedFile is null || _validationMessage is not null || _uploading)" OnClick="UploadAsync" StartIcon="@Icons.Material.Filled.CloudUpload">
-                @(_uploading ? FrontLabels.TextureLoading : FrontLabels.UploadTexture)
+                @(_uploading ? L["textures.loading"] : L["textures.upload"])
             </MudButton>
         </MudStack>
     </MudPaper>
 
     <MudPaper Class="pa-4" Elevation="1">
-        <MudText Typo="Typo.h6">@FrontLabels.Textures</MudText>
+        <MudText Typo="Typo.h6">@L["textures.title"]</MudText>
         @if (_loading)
         {
-            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-3" />
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-3" aria-label='@L["textures.loading"]' />
         }
         else if (_loadError is not null)
         {
-            <MudAlert Severity="Severity.Error" Class="mt-3">@_loadError</MudAlert>
+            <MudAlert Severity="Severity.Error" Class="mt-3" aria-live="polite">@_loadError</MudAlert>
         }
         else if (_textures.Count == 0)
         {
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">@FrontLabels.NoTextures</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">@L["textures.noTextures"]</MudText>
         }
         else
         {
@@ -69,15 +69,15 @@
                 {
                     <MudItem xs="12" sm="6" md="4" @key="texture.Id">
                         <MudCard>
-                            <div role="img" aria-label="@($"{texture.Type} texture preview")">
+                            <div role="img" aria-label="@($"{TextureTypeLabel(texture.Type)} {L["textures.preview"]}")">
                                 <MudCardMedia Image="@PreviewUrl(texture.Id)" Height="180" />
                             </div>
                             <MudCardContent>
-                                <MudText Typo="Typo.subtitle1">@texture.Type</MudText>
-                                <MudText Typo="Typo.body2" Color="Color.Secondary">@texture.Width x @texture.Height · @(texture.IsPublic ? "Public" : "Private")</MudText>
+                                <MudText Typo="Typo.subtitle1">@TextureTypeLabel(texture.Type)</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@texture.Width x @texture.Height · @(texture.IsPublic ? L["textures.publicStatus"] : L["textures.privateStatus"])</MudText>
                             </MudCardContent>
                             <MudCardActions>
-                                <MudButton Color="Color.Error" Variant="Variant.Text" Disabled="@_deletingIds.Contains(texture.Id)" OnClick="@(() => DeleteAsync(texture))">Delete</MudButton>
+                                <MudButton Color="Color.Error" Variant="Variant.Text" Disabled="@_deletingIds.Contains(texture.Id)" OnClick="@(() => DeleteAsync(texture))">@L["textures.delete"]</MudButton>
                             </MudCardActions>
                         </MudCard>
                     </MudItem>
@@ -115,7 +115,7 @@
         }
         catch (ApiException exception)
         {
-            _loadError = exception.Message;
+            _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }
         finally
         {
@@ -138,13 +138,13 @@
     {
         if (file.Size > MaxRawFileSize)
         {
-            return FrontLabels.TextureTooLarge;
+            return L["textures.fileTooLarge"];
         }
 
         if (!file.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
             || !string.Equals(file.ContentType, "image/png", StringComparison.OrdinalIgnoreCase))
         {
-            return FrontLabels.InvalidPngType;
+            return L["textures.invalidType"];
         }
 
         try
@@ -156,13 +156,13 @@
             if (!IsAllowedSize(_textureType, dimensions.Width, dimensions.Height))
             {
                 return _textureType == TextureType.Skin
-                    ? FrontLabels.InvalidSkinSize
-                    : FrontLabels.InvalidCapeSize;
+                        ? L["textures.invalidSkinSize"]
+                        : L["textures.invalidCapeSize"];
             }
         }
         catch (InvalidDataException)
         {
-            return FrontLabels.InvalidPng;
+            return L["textures.invalidPng"];
         }
 
         return null;
@@ -189,7 +189,7 @@
         }
         catch (ApiException exception)
         {
-            _validationMessage = exception.Message;
+            _validationMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.upload"] : exception.Message;
         }
         finally
         {
@@ -207,7 +207,7 @@
         }
         catch (ApiException exception)
         {
-            _loadError = exception.Message;
+            _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }
         finally
         {
@@ -220,6 +220,8 @@
         var baseUrl = YggdrasilOptions.Value.PublicBaseUrl.AbsoluteUri.TrimEnd('/') + "/";
         return new Uri(new Uri(baseUrl), $"api/yggdrasil/textures/{id:N}.png").ToString();
     }
+
+    private string TextureTypeLabel(TextureType type) => type == TextureType.Cape ? L["textures.cape"] : L["textures.skin"];
 
     private static (int Width, int Height) ReadPngDimensions(byte[] bytes)
     {

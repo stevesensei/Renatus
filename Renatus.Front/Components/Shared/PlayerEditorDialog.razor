@@ -4,22 +4,22 @@
     <DialogContent>
         <MudForm @ref="_form">
             <MudStack Spacing="3">
-                <MudTextField @bind-Value="_name" Label="@PlayerLabels.Name" Disabled="@IsEdit" Required="@(!IsEdit)"
-                              RequiredError="@PlayerLabels.InvalidName" Validation="@((Func<string, string?>)ValidateName)" />
-                <MudSelect T="SkinModel" @bind-Value="_skinModel" Label="@PlayerLabels.SkinModel">
-                    <MudSelectItem Value="SkinModel.Default">@PlayerLabels.Default</MudSelectItem>
-                    <MudSelectItem Value="SkinModel.Slim">@PlayerLabels.Slim</MudSelectItem>
+                <MudTextField @bind-Value="_name" Label='@L["players.name"]' Disabled="@IsEdit" Required="@(!IsEdit)"
+                              RequiredError='@L["players.invalidName"]' Validation="@((Func<string, string?>)ValidateName)" />
+                <MudSelect T="SkinModel" @bind-Value="_skinModel" Label='@L["textures.skinModel"]'>
+                    <MudSelectItem Value="SkinModel.Default">@L["textures.default"]</MudSelectItem>
+                    <MudSelectItem Value="SkinModel.Slim">@L["textures.slim"]</MudSelectItem>
                 </MudSelect>
-                <MudTextField @bind-Value="_skinTextureId" Label="@PlayerLabels.SkinTextureId"
-                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder="@PlayerLabels.OptionalTextureId" />
-                <MudTextField @bind-Value="_capeTextureId" Label="@PlayerLabels.CapeTextureId"
-                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder="@PlayerLabels.OptionalTextureId" />
+                <MudTextField @bind-Value="_skinTextureId" Label='@L["players.skinTextureId"]'
+                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder='@L["players.optionalGuid"]' />
+                <MudTextField @bind-Value="_capeTextureId" Label='@L["players.capeTextureId"]'
+                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder='@L["players.optionalGuid"]' />
             </MudStack>
         </MudForm>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Color="Color.Default">@PlayerLabels.Cancel</MudButton>
-        <MudButton OnClick="Submit" Color="Color.Primary" Variant="Variant.Filled">@PlayerLabels.Save</MudButton>
+        <MudButton OnClick="Cancel" Color="Color.Default">@L["players.cancel"]</MudButton>
+        <MudButton OnClick="Submit" Color="Color.Primary" Variant="Variant.Filled">@L["players.save"]</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -73,14 +73,14 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    private static string? ValidateName(string value)
+    private string? ValidateName(string value)
     {
-        return PlayerNameRegex.IsMatch(value.Trim()) ? null : PlayerLabels.InvalidName;
+        return PlayerNameRegex.IsMatch(value.Trim()) ? null : L["players.invalidName"];
     }
 
-    private static string? ValidateTextureId(string value)
+    private string? ValidateTextureId(string value)
     {
-        return TryParseOptionalGuid(value, out _) ? null : PlayerLabels.InvalidTextureId;
+        return TryParseOptionalGuid(value, out _) ? null : L["players.invalidTextureId"];
     }
 
     private static bool TryParseOptionalGuid(string value, out Guid? id)

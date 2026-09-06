@@ -1,17 +1,21 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 using MudBlazor.Services;
 using Renatus.Front.Components;
 using Renatus.Front.Models;
 using Renatus.Front.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("zh-CN");
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
+builder.Services.AddSingleton<LocalizationService>();
 
 builder.Services.AddHttpContextAccessor();
 

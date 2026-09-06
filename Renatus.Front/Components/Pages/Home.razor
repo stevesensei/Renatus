@@ -1,10 +1,10 @@
 ﻿@page "/"
 
-<PageTitle>@(_config?.Title ?? SiteLabels.SiteName)</PageTitle>
+<PageTitle>@(_config?.Title ?? L["site.name"])</PageTitle>
 
 <section class="renatus-hero">
     <div class="renatus-hero-copy">
-        <MudText Typo="Typo.overline" Class="renatus-eyebrow">@SiteLabels.CommunityEyebrow</MudText>
+        <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["site.eyebrow"]</MudText>
         @if (_loading)
         {
             <MudSkeleton Animation="Animation.Wave" Height="4rem" Width="75%" />
@@ -39,7 +39,7 @@
 
 @if (_errorMessage is not null)
 {
-    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">@_errorMessage</MudAlert>
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" aria-live="polite">@_errorMessage</MudAlert>
 }
 
 @code {
@@ -58,7 +58,7 @@
         }
         catch (ApiException exception)
         {
-            _errorMessage = exception.Message;
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.homeLoad"] : exception.Message;
         }
         finally
         {

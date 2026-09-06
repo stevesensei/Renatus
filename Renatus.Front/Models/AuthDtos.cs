@@ -41,28 +41,28 @@ public sealed record AuthUserDto(
 
 public sealed class LoginForm
 {
-    [Required(ErrorMessage = "Login is required.")]
+    [Required(ErrorMessage = "validation.loginRequired")]
     public string Login { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Password is required.")]
+    [Required(ErrorMessage = "validation.passwordRequired")]
     public string Password { get; set; } = string.Empty;
 }
 
 public sealed class RegisterForm
 {
-    [Required(ErrorMessage = "Username is required.")]
-    [StringLength(64)]
+    [Required(ErrorMessage = "validation.usernameRequired")]
+    [StringLength(64, ErrorMessage = "validation.usernameLength")]
     public string Username { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Email is required.")]
-    [EmailAddress]
-    [StringLength(256)]
+    [Required(ErrorMessage = "validation.emailRequired")]
+    [EmailAddress(ErrorMessage = "validation.invalidEmail")]
+    [StringLength(256, ErrorMessage = "validation.emailLength")]
     public string Email { get; set; } = string.Empty;
 
-    [StringLength(64)]
+    [StringLength(64, ErrorMessage = "validation.nicknameLength")]
     public string NickName { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Password is required.")]
-    [StringLength(128, MinimumLength = 1)]
+    [Required(ErrorMessage = "validation.passwordRequired")]
+    [StringLength(128, MinimumLength = 1, ErrorMessage = "validation.passwordLength")]
     public string Password { get; set; } = string.Empty;
 }

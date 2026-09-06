@@ -1,7 +1,7 @@
 @page "/login"
 @attribute [AllowAnonymous]
 
-<PageTitle>@(_registerMode ? SiteLabels.Register : SiteLabels.Login)</PageTitle>
+<PageTitle>@(_registerMode ? L["site.register"] : L["site.login"])</PageTitle>
 
 <section class="renatus-auth-page">
     <div class="renatus-auth-shell">
@@ -10,37 +10,37 @@
             {
                 <img src="@_announcement.Image" alt="" />
             }
-            <MudText Typo="Typo.overline" Class="renatus-eyebrow">RENATUS</MudText>
-            <MudText Typo="Typo.h2">@(_announcement?.Title ?? SiteLabels.Welcome)</MudText>
-            <MudText Typo="Typo.body1" Class="renatus-muted">@(_announcement?.Body ?? SiteLabels.SignInToContinue)</MudText>
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["site.eyebrow"]</MudText>
+            <MudText Typo="Typo.h2">@(_announcement?.Title ?? L["site.welcome"])</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@(_announcement?.Body ?? L["site.signInToContinue"])</MudText>
         </div>
         <div class="renatus-auth-form">
-            <MudText Typo="Typo.h3">@(_registerMode ? SiteLabels.CreateAccount : SiteLabels.WelcomeBack)</MudText>
-            <MudText Typo="Typo.body2" Class="renatus-muted mb-4">@(_registerMode ? SiteLabels.JoinCommunity : SiteLabels.UseAccountToContinue)</MudText>
+            <MudText Typo="Typo.h3">@(_registerMode ? L["site.createAccount"] : L["site.welcomeBack"])</MudText>
+            <MudText Typo="Typo.body2" Class="renatus-muted mb-4">@(_registerMode ? L["site.joinCommunity"] : L["site.useAccountToContinue"])</MudText>
 
             @if (_registerMode)
             {
                 <EditForm Model="_registerForm" OnValidSubmit="SubmitRegister">
-                    <DataAnnotationsValidator />
-                    <MudTextField @bind-Value="_registerForm.Username" Label="@SiteLabels.Username" For="@(() => _registerForm.Username)" Required="true" />
-                    <MudTextField @bind-Value="_registerForm.Email" Label="@SiteLabels.Email" InputType="InputType.Email" For="@(() => _registerForm.Email)" Required="true" Class="mt-3" />
-                    <MudTextField @bind-Value="_registerForm.NickName" Label="@SiteLabels.Nickname" For="@(() => _registerForm.NickName)" Class="mt-3" />
-                    <MudTextField @bind-Value="_registerForm.Password" Label="@SiteLabels.Password" InputType="InputType.Password" For="@(() => _registerForm.Password)" Required="true" Class="mt-3" />
+                    <LocalizedDataAnnotationsValidator />
+                    <MudTextField @bind-Value="_registerForm.Username" Label='@L["site.username"]' For="@(() => _registerForm.Username)" Required="true" />
+                    <MudTextField @bind-Value="_registerForm.Email" Label='@L["site.email"]' InputType="InputType.Email" For="@(() => _registerForm.Email)" Required="true" Class="mt-3" />
+                    <MudTextField @bind-Value="_registerForm.NickName" Label='@L["site.nickname"]' For="@(() => _registerForm.NickName)" Class="mt-3" />
+                    <MudTextField @bind-Value="_registerForm.Password" Label='@L["site.password"]' InputType="InputType.Password" For="@(() => _registerForm.Password)" Required="true" Class="mt-3" />
                     <ValidationSummary />
                     <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="@_submitting" Class="mt-4">
-                        @(_submitting ? SiteLabels.CreateAccountProgress : SiteLabels.CreateAccount)
+                        @(_submitting ? L["site.createAccountProgress"] : L["site.createAccount"])
                     </MudButton>
                 </EditForm>
             }
             else
             {
                 <EditForm Model="_loginForm" OnValidSubmit="SubmitLogin">
-                    <DataAnnotationsValidator />
-                    <MudTextField @bind-Value="_loginForm.Login" Label="@SiteLabels.UsernameOrEmail" For="@(() => _loginForm.Login)" Required="true" />
-                    <MudTextField @bind-Value="_loginForm.Password" Label="@SiteLabels.Password" InputType="InputType.Password" For="@(() => _loginForm.Password)" Required="true" Class="mt-3" />
+                    <LocalizedDataAnnotationsValidator />
+                    <MudTextField @bind-Value="_loginForm.Login" Label='@L["site.usernameOrEmail"]' For="@(() => _loginForm.Login)" Required="true" />
+                    <MudTextField @bind-Value="_loginForm.Password" Label='@L["site.password"]' InputType="InputType.Password" For="@(() => _loginForm.Password)" Required="true" Class="mt-3" />
                     <ValidationSummary />
                     <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="@_submitting" Class="mt-4">
-                        @(_submitting ? SiteLabels.SignInProgress : SiteLabels.SignIn)
+                        @(_submitting ? L["site.signInProgress"] : L["site.signIn"])
                     </MudButton>
                 </EditForm>
             }
@@ -50,7 +50,7 @@
                 <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" aria-live="polite">@_errorMessage</MudAlert>
             }
             <MudButton Variant="Variant.Text" Color="Color.Secondary" FullWidth="true" Class="mt-3" OnClick="ToggleMode">
-                @(_registerMode ? SiteLabels.AlreadyHaveAccount : SiteLabels.NeedAccount)
+                @(_registerMode ? L["site.alreadyHaveAccount"] : L["site.needAccount"])
             </MudButton>
         </div>
     </div>
@@ -86,7 +86,7 @@
         }
         catch (ApiException exception)
         {
-            _errorMessage = exception.Message;
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.authLoad"] : exception.Message;
         }
     }
 
@@ -117,7 +117,7 @@
         }
         catch (ApiException exception)
         {
-            _errorMessage = exception.Message;
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.authLoad"] : exception.Message;
         }
         finally
         {

@@ -8,30 +8,30 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Dense="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Open navigation" OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-2">@SiteLabels.SiteName</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label='@L["nav.open"]' OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">@L["site.name"]</MudText>
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
                 <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-2">@Initials</MudAvatar>
                 <MudText Typo="Typo.body2" Class="mr-2">@_displayName</MudText>
-                <MudButton Color="Color.Inherit" OnClick="@SignOut">@SiteLabels.Logout</MudButton>
+                <MudButton Color="Color.Inherit" OnClick="@SignOut">@L["site.logout"]</MudButton>
             </Authorized>
             <NotAuthorized>
-                <MudButton Color="Color.Inherit" Href="/login">@SiteLabels.Login</MudButton>
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" Href="/login?mode=register">@SiteLabels.Register</MudButton>
+                <MudButton Color="Color.Inherit" Href="/login">@L["site.login"]</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Href="/login?mode=register">@L["site.register"]</MudButton>
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md" ClipMode="DrawerClipMode.Always">
         <MudNavMenu>
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">@L["nav.home"]</MudNavLink>
             <AuthorizeView>
                 <Authorized>
-                    <MudNavLink Href="/dashboard" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-                    <MudNavLink Href="/players" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">@PlayerLabels.Players</MudNavLink>
-                    <MudNavLink Href="/dashboard#textures" Icon="@Icons.Material.Filled.Palette">Textures</MudNavLink>
+                    <MudNavLink Href="/dashboard" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard">@L["nav.dashboard"]</MudNavLink>
+                    <MudNavLink Href="/players" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">@L["nav.players"]</MudNavLink>
+                    <MudNavLink Href="/dashboard#textures" Icon="@Icons.Material.Filled.Palette">@L["nav.textures"]</MudNavLink>
                 </Authorized>
             </AuthorizeView>
         </MudNavMenu>
@@ -45,9 +45,9 @@
 </MudLayout>
 
 <div id="blazor-error-ui">
-    An unhandled error has occurred.
-    <a href="" class="reload">Reload</a>
-    <a class="dismiss">🗙</a>
+    @L["errors.unhandled"]
+    <a href="" class="reload">@L["shell.reload"]</a>
+    <button type="button" class="dismiss" aria-label='@L["shell.dismiss"]'>×</button>
 </div>
 
 @code {
@@ -91,7 +91,7 @@
 
     private string Initials => string.Join(
         string.Empty,
-        (_displayName ?? _userName ?? "R")
+        (_displayName ?? _userName ?? L["site.name"])
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Take(2)
             .Select(part => part[0]))

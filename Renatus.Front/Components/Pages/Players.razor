@@ -2,21 +2,21 @@
 @attribute [Authorize]
 @implements IAsyncDisposable
 
-<PageTitle>@PlayerLabels.PageTitle</PageTitle>
+<PageTitle>@L["players.title"]</PageTitle>
 
 <MudStack Spacing="4">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="player-toolbar">
         <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">@PlayerLabels.PageTitle</MudText>
-            <MudText Typo="Typo.body1" Color="Color.Secondary">@PlayerLabels.PageDescription</MudText>
+            <MudText Typo="Typo.h4" GutterBottom="true">@L["players.title"]</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">@L["players.description"]</MudText>
         </div>
         <MudStack Row="true" Spacing="2">
             <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadPlayersAsync" Disabled="@_isBusy">
-                @PlayerLabels.Refresh
+                @L["players.refresh"]
             </MudButton>
             <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
                        OnClick="OpenCreateDialogAsync" Disabled="@(_isBusy || !CanCreate)">
-                @PlayerLabels.Create
+                 @L["players.create"]
             </MudButton>
         </MudStack>
     </MudStack>
@@ -26,13 +26,13 @@
         <MudCard Outlined="true" Class="pa-6">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
-                <MudText Color="Color.Secondary">@PlayerLabels.Loading</MudText>
+                <MudText Color="Color.Secondary">@L["players.loading"]</MudText>
             </MudStack>
         </MudCard>
     }
     else if (_errorMessage is not null)
     {
-        <MudAlert Severity="Severity.Error" ShowCloseIcon="true" CloseIconClicked="ClearError">
+        <MudAlert Severity="Severity.Error" ShowCloseIcon="true" CloseIconClicked="ClearError" aria-live="polite">
             @_errorMessage
         </MudAlert>
     }
@@ -41,10 +41,10 @@
         <MudCard Outlined="true" Class="pa-6">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Large" Color="Color.Primary" />
-                <MudText Typo="Typo.h6">@PlayerLabels.Empty</MudText>
-                <MudText Color="Color.Secondary">@PlayerLabels.EmptyDescription</MudText>
+                <MudText Typo="Typo.h6">@L["players.empty"]</MudText>
+                <MudText Color="Color.Secondary">@L["players.emptyDescription"]</MudText>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenCreateDialogAsync">
-                    @PlayerLabels.Create
+                    @L["players.create"]
                 </MudButton>
             </MudStack>
         </MudCard>
@@ -52,7 +52,7 @@
     else
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudText Typo="Typo.h6">@PlayerLabels.Players</MudText>
+            <MudText Typo="Typo.h6">@L["nav.players"]</MudText>
             <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_players.Count / @_maxPlayerCount</MudChip>
         </MudStack>
         <MudGrid Spacing="3">
@@ -64,23 +64,23 @@
                             <MudStack Spacing="2">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                     <MudText Typo="Typo.h6">@player.Name</MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@player.SkinModel</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@SkinModelLabel(player.SkinModel)</MudChip>
                                 </MudStack>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @PlayerLabels.Created: @player.CreatedAt.ToLocalTime().ToString("d")
+                                    @L["players.created"]: @player.CreatedAt.ToLocalTime().ToString("d")
                                 </MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @PlayerLabels.Updated: @player.UpdatedAt.ToLocalTime().ToString("d")
+                                    @L["players.updated"]: @player.UpdatedAt.ToLocalTime().ToString("d")
                                 </MudText>
                             </MudStack>
                         </MudCardContent>
                         <MudCardActions>
                             <MudButton StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenEditDialogAsync(player))">
-                                @PlayerLabels.EditTextures
+                            @L["players.editTextures"]
                             </MudButton>
                             <MudSpacer />
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                           aria-label="@PlayerLabels.Delete" OnClick="@(() => DeletePlayerAsync(player))" />
+                                            aria-label='@L["players.delete"]' OnClick="@(() => DeletePlayerAsync(player))" />
                         </MudCardActions>
                     </MudCard>
                 </MudItem>
@@ -129,7 +129,7 @@
         }
         catch (ApiException exception)
         {
-            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? PlayerLabels.LoadFailed : exception.Message;
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.playerLoad"] : exception.Message;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -148,7 +148,7 @@
 
     private async Task OpenCreateDialogAsync()
     {
-        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(PlayerLabels.Create);
+        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(L["players.create"]);
         var result = await dialog.Result;
         if (result is null || result.Canceled || result.Data is not PlayerEditorDialog.PlayerEditorResult editor)
         {
@@ -157,8 +157,8 @@
 
         await RunMutationAsync(
             () => PlayerApi.CreateAsync(new CreatePlayerRequest(editor.Name, editor.SkinModel, editor.SkinTextureId, editor.CapeTextureId), _loadCancellation.Token),
-            PlayerLabels.CreateFailed,
-            PlayerLabels.CreatedFeedback);
+            L["errors.playerCreate"],
+            L["players.createdFeedback"]);
     }
 
     private async Task OpenEditDialogAsync(PlayerDto player)
@@ -167,7 +167,7 @@
         {
             { dialog => dialog.Player, player },
         };
-        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(PlayerLabels.EditTextures, parameters);
+        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(L["players.editTextures"], parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled || result.Data is not PlayerEditorDialog.PlayerEditorResult editor)
         {
@@ -179,17 +179,17 @@
                 player.Id,
                 new UpdatePlayerTexturesRequest(editor.SkinTextureId, editor.CapeTextureId, editor.SkinModel),
                 _loadCancellation.Token),
-            PlayerLabels.UpdateFailed,
-            PlayerLabels.UpdatedFeedback);
+            L["errors.playerUpdate"],
+            L["players.updatedFeedback"]);
     }
 
     private async Task DeletePlayerAsync(PlayerDto player)
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            PlayerLabels.DeleteTitle,
-            PlayerLabels.DeletePrompt,
-            yesText: PlayerLabels.Delete,
-            cancelText: PlayerLabels.Cancel,
+            L["players.deleteTitle"],
+            L["players.deletePrompt"],
+            yesText: L["players.delete"],
+            cancelText: L["players.cancel"],
             options: new DialogOptions { CloseOnEscapeKey = true });
         if (confirmed != true)
         {
@@ -198,8 +198,8 @@
 
         await RunMutationAsync(
             () => PlayerApi.DeleteAsync(player.Id, _loadCancellation.Token),
-            PlayerLabels.DeleteFailed,
-            PlayerLabels.DeletedFeedback);
+            L["errors.playerDelete"],
+            L["players.deletedFeedback"]);
     }
 
     private async Task RunMutationAsync<T>(Func<Task<T>> operation, string failureFallback, string successMessage)
@@ -237,6 +237,8 @@
 
     private static bool IsUnauthorized(ApiException exception) =>
         exception.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+
+    private string SkinModelLabel(SkinModel model) => model == SkinModel.Slim ? L["textures.slim"] : L["textures.default"];
 
     public async ValueTask DisposeAsync()
     {
