@@ -1,0 +1,100 @@
+@using System.Text.RegularExpressions
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_name" Label="@PlayerLabels.Name" Disabled="@IsEdit" Required="@(!IsEdit)"
+                              RequiredError="@PlayerLabels.InvalidName" Validation="@((Func<string, string?>)ValidateName)" />
+                <MudSelect T="SkinModel" @bind-Value="_skinModel" Label="@PlayerLabels.SkinModel">
+                    <MudSelectItem Value="SkinModel.Default">@PlayerLabels.Default</MudSelectItem>
+                    <MudSelectItem Value="SkinModel.Slim">@PlayerLabels.Slim</MudSelectItem>
+                </MudSelect>
+                <MudTextField @bind-Value="_skinTextureId" Label="@PlayerLabels.SkinTextureId"
+                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder="@PlayerLabels.OptionalTextureId" />
+                <MudTextField @bind-Value="_capeTextureId" Label="@PlayerLabels.CapeTextureId"
+                              Validation="@((Func<string, string?>)ValidateTextureId)" Placeholder="@PlayerLabels.OptionalTextureId" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Default">@PlayerLabels.Cancel</MudButton>
+        <MudButton OnClick="Submit" Color="Color.Primary" Variant="Variant.Filled">@PlayerLabels.Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly Regex PlayerNameRegex = new("^[A-Za-z0-9_]{1,16}$", RegexOptions.CultureInvariant);
+    private MudForm? _form;
+    private string _name = string.Empty;
+    private string _skinTextureId = string.Empty;
+    private string _capeTextureId = string.Empty;
+    private SkinModel _skinModel = SkinModel.Default;
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public PlayerDto? Player { get; set; }
+
+    private bool IsEdit => Player is not null;
+
+    protected override void OnInitialized()
+    {
+        if (Player is null)
+        {
+            return;
+        }
+
+        _name = Player.Name;
+        _skinModel = Player.SkinModel;
+        _skinTextureId = Player.SkinTextureId?.ToString("D") ?? string.Empty;
+        _capeTextureId = Player.CapeTextureId?.ToString("D") ?? string.Empty;
+    }
+
+    private async Task Submit()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        await _form.ValidateAsync();
+        if (!_form.IsValid || !TryParseOptionalGuid(_skinTextureId, out var skinTextureId) ||
+            !TryParseOptionalGuid(_capeTextureId, out var capeTextureId) ||
+            (!IsEdit && !PlayerNameRegex.IsMatch(_name.Trim())))
+        {
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(new PlayerEditorResult(
+            _name.Trim(), _skinModel, skinTextureId, capeTextureId)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private static string? ValidateName(string value)
+    {
+        return PlayerNameRegex.IsMatch(value.Trim()) ? null : PlayerLabels.InvalidName;
+    }
+
+    private static string? ValidateTextureId(string value)
+    {
+        return TryParseOptionalGuid(value, out _) ? null : PlayerLabels.InvalidTextureId;
+    }
+
+    private static bool TryParseOptionalGuid(string value, out Guid? id)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            id = null;
+            return true;
+        }
+
+        var parsed = Guid.TryParse(value.Trim(), out var valueId);
+        id = parsed ? valueId : null;
+        return parsed;
+    }
+
+    public sealed record PlayerEditorResult(string Name, SkinModel SkinModel, Guid? SkinTextureId, Guid? CapeTextureId);
+}

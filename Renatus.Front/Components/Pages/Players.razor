@@ -1,0 +1,246 @@
+@page "/players"
+@attribute [Authorize]
+@implements IAsyncDisposable
+
+<PageTitle>@PlayerLabels.PageTitle</PageTitle>
+
+<MudStack Spacing="4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="player-toolbar">
+        <div>
+            <MudText Typo="Typo.h4" GutterBottom="true">@PlayerLabels.PageTitle</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">@PlayerLabels.PageDescription</MudText>
+        </div>
+        <MudStack Row="true" Spacing="2">
+            <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadPlayersAsync" Disabled="@_isBusy">
+                @PlayerLabels.Refresh
+            </MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+                       OnClick="OpenCreateDialogAsync" Disabled="@(_isBusy || !CanCreate)">
+                @PlayerLabels.Create
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_isLoading)
+    {
+        <MudCard Outlined="true" Class="pa-6">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                <MudText Color="Color.Secondary">@PlayerLabels.Loading</MudText>
+            </MudStack>
+        </MudCard>
+    }
+    else if (_errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" ShowCloseIcon="true" CloseIconClicked="ClearError">
+            @_errorMessage
+        </MudAlert>
+    }
+    else if (_players.Count == 0)
+    {
+        <MudCard Outlined="true" Class="pa-6">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">@PlayerLabels.Empty</MudText>
+                <MudText Color="Color.Secondary">@PlayerLabels.EmptyDescription</MudText>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenCreateDialogAsync">
+                    @PlayerLabels.Create
+                </MudButton>
+            </MudStack>
+        </MudCard>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h6">@PlayerLabels.Players</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_players.Count / @_maxPlayerCount</MudChip>
+        </MudStack>
+        <MudGrid Spacing="3">
+            @foreach (var player in _players)
+            {
+                <MudItem xs="12" sm="6" md="4" @key="player.Id">
+                    <MudCard Outlined="true" Class="h-100">
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.h6">@player.Name</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@player.SkinModel</MudChip>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @PlayerLabels.Created: @player.CreatedAt.ToLocalTime().ToString("d")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @PlayerLabels.Updated: @player.UpdatedAt.ToLocalTime().ToString("d")
+                                </MudText>
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenEditDialogAsync(player))">
+                                @PlayerLabels.EditTextures
+                            </MudButton>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                           aria-label="@PlayerLabels.Delete" OnClick="@(() => DeletePlayerAsync(player))" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudStack>
+
+@code {
+    private readonly List<PlayerDto> _players = [];
+    private CancellationTokenSource _loadCancellation = new();
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private int _maxPlayerCount;
+    private string? _errorMessage;
+
+    [Inject] private PlayerApi PlayerApi { get; set; } = default!;
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool CanCreate => _players.Count < _maxPlayerCount;
+
+    protected override Task OnInitializedAsync() => LoadPlayersAsync();
+
+    private async Task LoadPlayersAsync()
+    {
+        var previousCancellation = _loadCancellation;
+        previousCancellation.Cancel();
+        var requestCancellation = new CancellationTokenSource();
+        _loadCancellation = requestCancellation;
+        var cancellationToken = requestCancellation.Token;
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var response = await PlayerApi.ListAsync(cancellationToken);
+            _players.Clear();
+            _players.AddRange(response.Players);
+            _maxPlayerCount = response.MaxPlayerCount;
+        }
+        catch (ApiException exception) when (IsUnauthorized(exception))
+        {
+            NavigateToLogin();
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? PlayerLabels.LoadFailed : exception.Message;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_loadCancellation, requestCancellation))
+            {
+                _isLoading = false;
+            }
+
+            previousCancellation.Dispose();
+            requestCancellation.Dispose();
+        }
+    }
+
+    private async Task OpenCreateDialogAsync()
+    {
+        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(PlayerLabels.Create);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not PlayerEditorDialog.PlayerEditorResult editor)
+        {
+            return;
+        }
+
+        await RunMutationAsync(
+            () => PlayerApi.CreateAsync(new CreatePlayerRequest(editor.Name, editor.SkinModel, editor.SkinTextureId, editor.CapeTextureId), _loadCancellation.Token),
+            PlayerLabels.CreateFailed,
+            PlayerLabels.CreatedFeedback);
+    }
+
+    private async Task OpenEditDialogAsync(PlayerDto player)
+    {
+        var parameters = new DialogParameters<PlayerEditorDialog>
+        {
+            { dialog => dialog.Player, player },
+        };
+        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(PlayerLabels.EditTextures, parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not PlayerEditorDialog.PlayerEditorResult editor)
+        {
+            return;
+        }
+
+        await RunMutationAsync(
+            () => PlayerApi.UpdateTexturesAsync(
+                player.Id,
+                new UpdatePlayerTexturesRequest(editor.SkinTextureId, editor.CapeTextureId, editor.SkinModel),
+                _loadCancellation.Token),
+            PlayerLabels.UpdateFailed,
+            PlayerLabels.UpdatedFeedback);
+    }
+
+    private async Task DeletePlayerAsync(PlayerDto player)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            PlayerLabels.DeleteTitle,
+            PlayerLabels.DeletePrompt,
+            yesText: PlayerLabels.Delete,
+            cancelText: PlayerLabels.Cancel,
+            options: new DialogOptions { CloseOnEscapeKey = true });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunMutationAsync(
+            () => PlayerApi.DeleteAsync(player.Id, _loadCancellation.Token),
+            PlayerLabels.DeleteFailed,
+            PlayerLabels.DeletedFeedback);
+    }
+
+    private async Task RunMutationAsync<T>(Func<Task<T>> operation, string failureFallback, string successMessage)
+    {
+        var cancellationToken = _loadCancellation.Token;
+        _isBusy = true;
+        _errorMessage = null;
+        try
+        {
+            await operation();
+            Snackbar.Add(successMessage, Severity.Success);
+            await LoadPlayersAsync();
+        }
+        catch (ApiException exception) when (IsUnauthorized(exception))
+        {
+            NavigateToLogin();
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? failureFallback : exception.Message;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ClearError() => _errorMessage = null;
+
+    private void NavigateToLogin() =>
+        Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("players")}", replace: true);
+
+    private static bool IsUnauthorized(ApiException exception) =>
+        exception.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+
+    public async ValueTask DisposeAsync()
+    {
+        await _loadCancellation.CancelAsync();
+        _loadCancellation.Dispose();
+    }
+}

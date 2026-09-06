@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Renatus.Front.Models;
@@ -49,7 +50,7 @@ public sealed class ApiClient
     {
         if (!response.IsSuccessStatusCode)
         {
-            throw new ApiException(ResponseCode.InternalError, $"HTTP {(int)response.StatusCode}");
+            throw new ApiException(ResponseCode.InternalError, $"HTTP {(int)response.StatusCode}", response.StatusCode);
         }
 
         var envelope = await response.Content.ReadFromJsonAsync<GlobalResponse<T>>(JsonOptions, cancellationToken);

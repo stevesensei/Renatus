@@ -35,6 +35,7 @@ builder.Services.AddHttpClient<ApiClient>((services, client) =>
 
 builder.Services.AddScoped<FrontSession>();
 builder.Services.AddScoped<FrontAuthService>();
+builder.Services.AddScoped<PlayerApi>();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
