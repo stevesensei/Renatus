@@ -6,3 +6,5 @@ riderModule.iml
 /.omo
 node_modules/
 npm-debug.log*
+/Renatus.Host/appsettings.Development.json
+/Renatus.Host/appsettings.json
