@@ -80,7 +80,7 @@
     private int ActivePanelIndex => _registerMode ? 1 : 0;
 
     [Inject]
-    private ApiClient ApiClient { get; set; } = default!;
+    private SiteApi SiteApi { get; set; } = default!;
 
     [Inject]
     private FrontAuthService AuthService { get; set; } = default!;
@@ -91,12 +91,12 @@
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         _registerMode = string.Equals(Mode, "register", StringComparison.OrdinalIgnoreCase);
         try
         {
-            var config = await ApiClient.GetAsync<SiteConfigDto>("/api/site/config");
+            var config = SiteApi.GetConfig();
             _announcement = config.LoginAnnouncement;
         }
         catch (ApiException exception)
@@ -107,6 +107,8 @@
         {
             _errorMessage = L["errors.authLoad"];
         }
+
+        return Task.CompletedTask;
     }
 
     private void ToggleMode()

@@ -1,7 +1,8 @@
-using Renatus.Front.Models;
+using Renatus.Host.Frontend.Models;
+using Renatus.Host.Data;
 using System.Net;
 
-namespace Renatus.Front.Services;
+namespace Renatus.Host.Frontend.Services;
 
 public sealed class ApiException : Exception
 {

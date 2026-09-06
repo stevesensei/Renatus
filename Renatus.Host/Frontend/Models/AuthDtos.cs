@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using System.ComponentModel.DataAnnotations;
 
-namespace Renatus.Front.Models;
+namespace Renatus.Host.Frontend.Models;
 
 public enum UserRole
 {

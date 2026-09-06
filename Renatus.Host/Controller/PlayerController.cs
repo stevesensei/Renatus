@@ -9,7 +9,7 @@ namespace Renatus.Host.Controller;
 
 [ApiController]
 [Route("api/player")]
-[Authorize]
+[Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)]
 public sealed class PlayerController(PlayerService playerService) : ControllerBase
 {
     [HttpPost]

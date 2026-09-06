@@ -9,7 +9,7 @@ namespace Renatus.Host.Controller;
 
 [ApiController]
 [Route("api/texture")]
-[Authorize]
+[Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)]
 public sealed class TextureController(TextureService textureService) : ControllerBase
 {
     [HttpPost]

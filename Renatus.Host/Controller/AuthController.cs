@@ -46,7 +46,7 @@ public sealed class AuthController(AuthService authService) : ControllerBase
         }
     }
 
-    [Authorize]
+    [Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("me")]
     public async Task<GlobalResponse<AuthUserDto>> Me(CancellationToken cancellationToken)
     {
@@ -67,14 +67,14 @@ public sealed class AuthController(AuthService authService) : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
     [HttpGet("admin/ping")]
     public Task<GlobalResponse<object>> AdminPing()
     {
         return Task.FromResult(GlobalResponse<object>.Success());
     }
 
-    [Authorize(Roles = "Player")]
+    [Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, Roles = "Player")]
     [HttpGet("player/ping")]
     public Task<GlobalResponse<object>> PlayerPing()
     {

@@ -148,15 +148,14 @@
     private string? _validationMessage;
     private string? _loadError;
 
-    [Inject] private ApiClient ApiClient { get; set; } = default!;
     [Inject] private TextureApi TextureApi { get; set; } = default!;
-    [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+    [Inject] private IOptions<Renatus.Host.Data.Config.YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var response = await ApiClient.GetAsync<UserTexturesResponse>("/api/texture", _cancellation.Token);
+            var response = await TextureApi.ListAsync(_cancellation.Token);
             _textures.AddRange(response.Textures);
         }
         catch (ApiException exception)
@@ -248,7 +247,7 @@
         _deletingIds.Add(texture.Id);
         try
         {
-            await ApiClient.DeleteAsync<TextureDto>($"/api/texture/{texture.Id}", _cancellation.Token);
+            await TextureApi.DeleteAsync(texture.Id, _cancellation.Token);
             _textures.Remove(texture);
         }
         catch (ApiException exception)
@@ -263,7 +262,7 @@
 
     private string PreviewUrl(Guid id)
     {
-        var baseUrl = YggdrasilOptions.Value.PublicBaseUrl.AbsoluteUri.TrimEnd('/') + "/";
+        var baseUrl = YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/') + "/";
         return new Uri(new Uri(baseUrl), $"api/yggdrasil/textures/{id:N}.png").ToString();
     }
 

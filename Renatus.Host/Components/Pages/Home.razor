@@ -68,13 +68,13 @@
     private string HeroDescription => string.IsNullOrWhiteSpace(_config?.Description) ? L["site.heroFallback"] : _config.Description;
 
     [Inject]
-    private ApiClient ApiClient { get; set; } = default!;
+    private SiteApi SiteApi { get; set; } = default!;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         try
         {
-            _config = await ApiClient.GetAsync<SiteConfigDto>("/api/site/config");
+            _config = SiteApi.GetConfig();
         }
         catch (ApiException exception)
         {
@@ -88,6 +88,8 @@
         {
             _loading = false;
         }
+
+        return Task.CompletedTask;
     }
 
     private static Variant ButtonVariant(string? style) => style?.ToLowerInvariant() switch

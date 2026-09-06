@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
-using Renatus.Front.Models;
+using Renatus.Host.Frontend.Models;
 
-namespace Renatus.Front.Services;
+namespace Renatus.Host.Frontend.Services;
 
 public sealed class PendingAuthStore(IMemoryCache cache)
 {

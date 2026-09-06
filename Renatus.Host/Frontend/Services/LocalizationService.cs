@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace Renatus.Front.Services;
+namespace Renatus.Host.Frontend.Services;
 
 public sealed class LocalizationService
 {

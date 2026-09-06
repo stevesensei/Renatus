@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Renatus.Front.Models;
+namespace Renatus.Host.Frontend.Models;
 
 public enum TextureType
 {
