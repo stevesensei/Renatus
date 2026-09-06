@@ -32,7 +32,7 @@ builder.Services.AddOptions<YggdrasilOptions>()
 builder.Services.AddTransient<BearerTokenHandler>();
 builder.Services.AddHttpClient<ApiClient>((services, client) =>
 {
-    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiOptions>>().Value;
+    var options = services.GetRequiredService<IOptions<ApiOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl.AbsoluteUri.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(30);
 }).AddHttpMessageHandler<BearerTokenHandler>();

@@ -10,39 +10,36 @@ public sealed record SessionKeyResponse(
     [property: JsonPropertyName("expiresAt")] DateTimeOffset ExpiresAt);
 
 public sealed record LoginRequest(
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("sessionKeyId")]
     Guid SessionKeyId,
 
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("login")]
     string Login,
 
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("encryptedPassword")]
     string EncryptedPassword);
 
 public sealed record RegisterRequest(
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("sessionKeyId")]
     Guid SessionKeyId,
 
-    [property: Required]
-    [property: MaxLength(64)]
+    [param: Required, MaxLength(64)]
     [property: JsonPropertyName("username")]
     string Username,
 
-    [property: Required]
-    [property: EmailAddress]
-    [property: MaxLength(256)]
+    [param: Required, EmailAddress, MaxLength(256)]
     [property: JsonPropertyName("email")]
     string Email,
 
-    [property: MaxLength(64)]
+    [param: MaxLength(64)]
     [property: JsonPropertyName("nickName")]
     string? NickName,
 
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("encryptedPassword")]
     string EncryptedPassword);
 
