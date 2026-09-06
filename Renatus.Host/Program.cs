@@ -25,6 +25,7 @@ builder.Services.AddSingleton<YggdrasilSigningKey>();
 builder.Services.AddScoped<YggdrasilService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
+builder.Services.AddScoped<TextureService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 

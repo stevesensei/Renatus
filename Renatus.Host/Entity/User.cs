@@ -17,5 +17,6 @@ public sealed class User
 
     public ICollection<UserAuthenticationMethod> AuthenticationMethods { get; set; } = new List<UserAuthenticationMethod>();
     public ICollection<Player> Players { get; set; } = new List<Player>();
+    public ICollection<Texture> Textures { get; set; } = new List<Texture>();
     public ICollection<YggdrasilClient> Clients { get; set; } = new List<YggdrasilClient>();
 }

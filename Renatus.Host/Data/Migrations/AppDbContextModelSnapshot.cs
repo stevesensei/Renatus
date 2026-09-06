@@ -90,16 +90,35 @@ namespace Renatus.Host.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Sha256")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SkinModel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Textures");
                 });
@@ -120,6 +139,11 @@ namespace Renatus.Host.Data.Migrations
 
                     b.Property<bool>("IsDisabled")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("MaxPlayerCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
 
                     b.Property<string>("NickName")
                         .IsRequired()
@@ -277,6 +301,17 @@ namespace Renatus.Host.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Renatus.Host.Entity.Texture", b =>
+                {
+                    b.HasOne("Renatus.Host.Entity.User", "User")
+                        .WithMany("Textures")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Renatus.Host.Entity.UserAuthenticationMethod", b =>
                 {
                     b.HasOne("Renatus.Host.Entity.User", "User")
@@ -318,6 +353,8 @@ namespace Renatus.Host.Data.Migrations
                     b.Navigation("Clients");
 
                     b.Navigation("Players");
+
+                    b.Navigation("Textures");
                 });
 #pragma warning restore 612, 618
         }

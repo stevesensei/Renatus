@@ -40,8 +40,8 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
             throw new PlayerException(StatusCodes.Status409Conflict, "Player name already exists.");
         }
 
-        await EnsureTextureTypeAsync(request.SkinTextureId, TextureType.Skin, cancellationToken);
-        await EnsureTextureTypeAsync(request.CapeTextureId, TextureType.Cape, cancellationToken);
+        await EnsureTextureTypeAsync(user.Id, request.SkinTextureId, TextureType.Skin, cancellationToken);
+        await EnsureTextureTypeAsync(user.Id, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
         var player = new Player
         {
@@ -132,8 +132,8 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
             throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
         }
 
-        await EnsureTextureTypeAsync(request.SkinTextureId, TextureType.Skin, cancellationToken);
-        await EnsureTextureTypeAsync(request.CapeTextureId, TextureType.Cape, cancellationToken);
+        await EnsureTextureTypeAsync(userId, request.SkinTextureId, TextureType.Skin, cancellationToken);
+        await EnsureTextureTypeAsync(userId, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
         player.SkinTextureId = request.SkinTextureId;
         player.CapeTextureId = request.CapeTextureId;
@@ -164,7 +164,11 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
         return new DeletePlayerResponse(playerId);
     }
 
-    private async Task EnsureTextureTypeAsync(Guid? textureId, TextureType textureType, CancellationToken cancellationToken)
+    private async Task EnsureTextureTypeAsync(
+        Guid userId,
+        Guid? textureId,
+        TextureType textureType,
+        CancellationToken cancellationToken)
     {
         if (textureId is null)
         {
@@ -173,7 +177,11 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
 
         var exists = await dbContext.Textures
             .AsNoTracking()
-            .AnyAsync(entity => entity.Id == textureId && entity.Type == textureType, cancellationToken);
+            .AnyAsync(
+                entity => entity.Id == textureId
+                    && entity.Type == textureType
+                    && (entity.UserId == userId || entity.IsPublic),
+                cancellationToken);
         if (!exists)
         {
             throw new PlayerException(StatusCodes.Status404NotFound, $"{textureType} texture was not found.");
@@ -197,7 +205,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
             player.UpdatedAt);
     }
 
-    private static string UserPlayersCacheKey(Guid userId)
+    public static string UserPlayersCacheKey(Guid userId)
     {
         return $"player:user:{userId:N}:players";
     }

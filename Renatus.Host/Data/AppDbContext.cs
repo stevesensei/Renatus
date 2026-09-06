@@ -76,9 +76,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasKey(texture => texture.Id);
             entity.Property(texture => texture.Type).HasConversion<string>().HasMaxLength(16).IsRequired();
+            entity.Property(texture => texture.SkinModel).HasConversion<string>().HasMaxLength(16).IsRequired();
             entity.Property(texture => texture.DataBase64).IsRequired();
             entity.Property(texture => texture.ContentType).HasMaxLength(64).IsRequired();
             entity.Property(texture => texture.Sha256).HasMaxLength(64);
+            entity.HasOne(texture => texture.User)
+                .WithMany(user => user.Textures)
+                .HasForeignKey(texture => texture.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(texture => texture.UserId);
         });
 
         modelBuilder.Entity<YggdrasilClient>(entity =>

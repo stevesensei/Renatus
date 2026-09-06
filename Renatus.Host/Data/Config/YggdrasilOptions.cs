@@ -19,4 +19,5 @@ public sealed class YggdrasilOptions
     public bool UsernameCheck { get; set; }
     public string SigningPrivateKeyPem { get; set; } = "";
     public string[] SkinDomains { get; set; } = [];
+    public Guid? DefaultSkinTextureId { get; set; }
 }

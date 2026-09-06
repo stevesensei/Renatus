@@ -70,9 +70,14 @@ public static class DbSeed
         var texture = new Texture
         {
             Id = textureId,
+            UserId = userId,
             Type = TextureType.Skin,
+            IsPublic = true,
+            SkinModel = SkinModel.Default,
             DataBase64 = textureBase64,
             ContentType = "image/png",
+            Width = 1,
+            Height = 1,
             Sha256 = Convert.ToHexString(SHA256.HashData(Convert.FromBase64String(textureBase64))).ToLowerInvariant()
         };
 

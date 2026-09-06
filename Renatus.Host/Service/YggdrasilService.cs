@@ -300,11 +300,12 @@ public sealed partial class YggdrasilService(
     private SessionProfileResponse BuildSessionProfile(Player player, bool unsigned)
     {
         var textureMap = new Dictionary<string, object>();
-        if (player.SkinTexture is not null)
+        var skinTextureId = player.SkinTexture?.Id ?? options.Value.DefaultSkinTextureId;
+        if (skinTextureId is not null)
         {
             textureMap["SKIN"] = new
             {
-                url = TextureUrl(player.SkinTexture.Id),
+                url = TextureUrl(skinTextureId.Value),
                 metadata = new
                 {
                     model = player.SkinModel == SkinModel.Slim ? "slim" : "default"
