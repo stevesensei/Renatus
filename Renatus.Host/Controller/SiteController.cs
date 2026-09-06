@@ -1,44 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Renatus.Host.Data;
-using Renatus.Host.Data.Config;
+using Renatus.Host.Service;
 
 namespace Renatus.Host.Controller;
 
 [ApiController]
 [Route("api/site")]
-public sealed class SiteController(IOptions<SiteOptions> options) : ControllerBase
+public sealed class SiteController(SiteService siteService) : ControllerBase
 {
     [HttpGet("config")]
-    public GlobalResponse<SiteConfigDto> GetConfig()
-    {
-        var site = options.Value;
-        var announcement = site.LoginAnnouncement ?? new SiteAnnouncementOptions();
-        var buttons = (site.Buttons ?? [])
-            .Where(button => !string.IsNullOrWhiteSpace(button.Label) && !string.IsNullOrWhiteSpace(button.Url))
-            .Take(3)
-            .Select(button => new SiteButtonDto(
-                button.Label.Trim(),
-                button.Url.Trim(),
-                NormalizeOptional(button.Style),
-                NormalizeOptional(button.Target)))
-            .ToArray();
-
-        var response = new SiteConfigDto(
-            site.HeroImage.Trim(),
-            site.Title.Trim(),
-            site.Description.Trim(),
-            new SiteAnnouncementDto(
-                announcement.Title.Trim(),
-                announcement.Body.Trim(),
-                announcement.Image.Trim()),
-            buttons);
-
-        return GlobalResponse<SiteConfigDto>.Success(response);
-    }
-
-    private static string? NormalizeOptional(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
+    public GlobalResponse<SiteConfigDto> GetConfig() => GlobalResponse<SiteConfigDto>.Success(siteService.GetConfig());
 }

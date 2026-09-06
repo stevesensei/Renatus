@@ -148,17 +148,19 @@
     private string? _validationMessage;
     private string? _loadError;
 
-    [Inject] private TextureApi TextureApi { get; set; } = default!;
+    [Inject] private TextureService TextureService { get; set; } = default!;
+    [Inject] private FrontendUserContext UserContext { get; set; } = default!;
     [Inject] private IOptions<Renatus.Host.Data.Config.YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var response = await TextureApi.ListAsync(_cancellation.Token);
+            var userId = await UserContext.GetUserIdAsync();
+            var response = await TextureService.GetUserTexturesAsync(userId, _cancellation.Token);
             _textures.AddRange(response.Textures);
         }
-        catch (ApiException exception)
+        catch (TextureException exception)
         {
             _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }
@@ -228,11 +230,12 @@
             await stream.CopyToAsync(memory, _cancellation.Token);
             var dataUrl = $"data:image/png;base64,{Convert.ToBase64String(memory.ToArray())}";
             var request = new UploadTextureRequest(_textureType, dataUrl, _isPublic, _skinModel);
-            var texture = await TextureApi.UploadAsync(request, _cancellation.Token);
+            var userId = await UserContext.GetUserIdAsync();
+            var texture = await TextureService.UploadTextureAsync(userId, request, _cancellation.Token);
             _textures.Insert(0, texture);
             _selectedFile = null;
         }
-        catch (ApiException exception)
+        catch (TextureException exception)
         {
             _validationMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.upload"] : exception.Message;
         }
@@ -247,10 +250,11 @@
         _deletingIds.Add(texture.Id);
         try
         {
-            await TextureApi.DeleteAsync(texture.Id, _cancellation.Token);
+            var userId = await UserContext.GetUserIdAsync();
+            await TextureService.DeleteTextureAsync(userId, texture.Id, _cancellation.Token);
             _textures.Remove(texture);
         }
-        catch (ApiException exception)
+        catch (TextureException exception)
         {
             _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }

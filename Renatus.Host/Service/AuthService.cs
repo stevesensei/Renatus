@@ -15,7 +15,7 @@ using StackExchange.Redis;
 namespace Renatus.Host.Service;
 
 public sealed class AuthService(
-    AppDbContext dbContext,
+    IDbContextFactory<AppDbContext> dbContextFactory,
     IConnectionMultiplexer connectionMultiplexer,
     IOptions<AuthOptions> options)
 {
@@ -40,6 +40,7 @@ public sealed class AuthService(
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var password = await ConsumeEncryptedPasswordAsync(request.SessionKeyId, request.EncryptedPassword, cancellationToken);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var normalizedLogin = YggdrasilFormat.Normalize(request.Login);
         var user = await dbContext.Users
             .Include(entity => entity.AuthenticationMethods)
@@ -59,6 +60,7 @@ public sealed class AuthService(
     {
         var password = await ConsumeEncryptedPasswordAsync(request.SessionKeyId, request.EncryptedPassword, cancellationToken);
         EnsurePasswordAllowed(password);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var username = request.Username.Trim();
         var email = request.Email.Trim();
@@ -108,6 +110,7 @@ public sealed class AuthService(
 
     public async Task<AuthUserDto> GetUserAsync(Guid userId, CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
         if (user is null || user.IsDisabled)
         {

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Renatus.Host.Data;
+using Renatus.Host.Utils;
 
 namespace Renatus.Host.Frontend.Services;
 
@@ -12,7 +13,7 @@ public sealed class FrontendUserContext(AuthenticationStateProvider authenticati
         var userIdValue = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdValue, out var userId))
         {
-            throw new ApiException(ResponseCode.ResultError, "Authorization token is invalid.");
+            throw new AuthException(StatusCodes.Status401Unauthorized, "Authorization token is invalid.");
         }
 
         return userId;

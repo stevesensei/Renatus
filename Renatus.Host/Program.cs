@@ -36,11 +36,7 @@ builder.Services.AddSingleton<LocalizationService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PendingAuthStore>();
 builder.Services.AddScoped<FrontendUserContext>();
-builder.Services.AddScoped<FrontAuthService>();
-builder.Services.AddScoped<PlayerApi>();
-builder.Services.AddScoped<TextureApi>();
-builder.Services.AddScoped<SiteApi>();
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
@@ -50,6 +46,7 @@ builder.Services.AddScoped<YggdrasilService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();
+builder.Services.AddScoped<SiteService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 

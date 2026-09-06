@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
-using Renatus.Host.Frontend.Models;
+using Renatus.Host.Data;
 
 namespace Renatus.Host.Frontend.Services;
 

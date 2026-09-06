@@ -7,7 +7,9 @@ using Renatus.Host.Utils;
 
 namespace Renatus.Host.Service;
 
-public sealed partial class PlayerService(AppDbContext dbContext, ICacheService cacheService)
+public sealed partial class PlayerService(
+    IDbContextFactory<AppDbContext> dbContextFactory,
+    ICacheService cacheService)
 {
     private static readonly TimeSpan UserPlayersCacheTtl = TimeSpan.FromMinutes(5);
 
@@ -16,6 +18,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
         CreatePlayerRequest request,
         CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var name = request.Name.Trim();
         ValidatePlayerName(name);
 
@@ -40,8 +43,8 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
             throw new PlayerException(StatusCodes.Status409Conflict, "Player name already exists.");
         }
 
-        await EnsureTextureTypeAsync(user.Id, request.SkinTextureId, TextureType.Skin, cancellationToken);
-        await EnsureTextureTypeAsync(user.Id, request.CapeTextureId, TextureType.Cape, cancellationToken);
+        await EnsureTextureTypeAsync(dbContext, user.Id, request.SkinTextureId, TextureType.Skin, cancellationToken);
+        await EnsureTextureTypeAsync(dbContext, user.Id, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
         var player = new Player
         {
@@ -70,6 +73,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
 
     public async Task<PlayerDto> GetPlayerAsync(Guid userId, Guid playerId, CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var player = await dbContext.Players
             .AsNoTracking()
             .FirstOrDefaultAsync(
@@ -85,6 +89,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
 
     public async Task<UserPlayersResponse> GetUserPlayersAsync(Guid userId, CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var user = await dbContext.Users
             .AsNoTracking()
             .Where(entity => entity.Id == userId)
@@ -123,6 +128,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
         UpdatePlayerTexturesRequest request,
         CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var player = await dbContext.Players
             .FirstOrDefaultAsync(
                 entity => entity.Id == playerId && entity.UserId == userId && !entity.User.IsDisabled,
@@ -132,8 +138,8 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
             throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
         }
 
-        await EnsureTextureTypeAsync(userId, request.SkinTextureId, TextureType.Skin, cancellationToken);
-        await EnsureTextureTypeAsync(userId, request.CapeTextureId, TextureType.Cape, cancellationToken);
+        await EnsureTextureTypeAsync(dbContext, userId, request.SkinTextureId, TextureType.Skin, cancellationToken);
+        await EnsureTextureTypeAsync(dbContext, userId, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
         player.SkinTextureId = request.SkinTextureId;
         player.CapeTextureId = request.CapeTextureId;
@@ -149,6 +155,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
 
     public async Task<DeletePlayerResponse> DeletePlayerAsync(Guid userId, Guid playerId, CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var player = await dbContext.Players
             .FirstOrDefaultAsync(
                 entity => entity.Id == playerId && entity.UserId == userId && !entity.User.IsDisabled,
@@ -165,6 +172,7 @@ public sealed partial class PlayerService(AppDbContext dbContext, ICacheService 
     }
 
     private async Task EnsureTextureTypeAsync(
+        AppDbContext dbContext,
         Guid userId,
         Guid? textureId,
         TextureType textureType,

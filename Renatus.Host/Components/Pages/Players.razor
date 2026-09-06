@@ -117,7 +117,8 @@
     private int _maxPlayerCount;
     private string? _errorMessage;
 
-    [Inject] private PlayerApi PlayerApi { get; set; } = default!;
+    [Inject] private PlayerService PlayerService { get; set; } = default!;
+    [Inject] private FrontendUserContext UserContext { get; set; } = default!;
     [Inject] private IDialogService DialogService { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -151,16 +152,17 @@
 
         try
         {
-            var response = await PlayerApi.ListAsync(cancellationToken);
+            var userId = await UserContext.GetUserIdAsync();
+            var response = await PlayerService.GetUserPlayersAsync(userId, cancellationToken);
             _players.Clear();
             _players.AddRange(response.Players);
             _maxPlayerCount = response.MaxPlayerCount;
         }
-        catch (ApiException exception) when (IsUnauthorized(exception))
+        catch (PlayerException exception) when (IsUnauthorized(exception))
         {
             NavigateToLogin();
         }
-        catch (ApiException exception)
+        catch (PlayerException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.playerLoad"] : exception.Message;
         }
@@ -186,7 +188,7 @@
         }
 
         await RunMutationAsync(
-            () => PlayerApi.CreateAsync(new CreatePlayerRequest(editor.Name, editor.SkinModel, editor.SkinTextureId, editor.CapeTextureId), _loadCancellation.Token),
+            () => CreatePlayerAsync(new CreatePlayerRequest(editor.Name, editor.SkinModel, editor.SkinTextureId, editor.CapeTextureId), _loadCancellation.Token),
             L["errors.playerCreate"],
             L["players.createdFeedback"]);
     }
@@ -205,7 +207,7 @@
         }
 
         await RunMutationAsync(
-            () => PlayerApi.UpdateTexturesAsync(
+            () => UpdatePlayerTexturesAsync(
                 player.Id,
                 new UpdatePlayerTexturesRequest(editor.SkinTextureId, editor.CapeTextureId, editor.SkinModel),
                 _loadCancellation.Token),
@@ -227,7 +229,7 @@
         }
 
         await RunMutationAsync(
-            () => PlayerApi.DeleteAsync(player.Id, _loadCancellation.Token),
+            () => DeletePlayerAsyncCore(player.Id, _loadCancellation.Token),
             L["errors.playerDelete"],
             L["players.deletedFeedback"]);
     }
@@ -243,11 +245,11 @@
             Snackbar.Add(successMessage, Severity.Success);
             await LoadPlayersAsync();
         }
-        catch (ApiException exception) when (IsUnauthorized(exception))
+        catch (PlayerException exception) when (IsUnauthorized(exception))
         {
             NavigateToLogin();
         }
-        catch (ApiException exception)
+        catch (PlayerException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? failureFallback : exception.Message;
         }
@@ -262,11 +264,32 @@
 
     private void ClearError() => _errorMessage = null;
 
+    private async Task<PlayerDto> CreatePlayerAsync(CreatePlayerRequest request, CancellationToken cancellationToken)
+    {
+        var userId = await UserContext.GetUserIdAsync();
+        return await PlayerService.CreatePlayerAsync(userId, request, cancellationToken);
+    }
+
+    private async Task<PlayerDto> UpdatePlayerTexturesAsync(
+        Guid playerId,
+        UpdatePlayerTexturesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = await UserContext.GetUserIdAsync();
+        return await PlayerService.UpdatePlayerTexturesAsync(userId, playerId, request, cancellationToken);
+    }
+
+    private async Task<DeletePlayerResponse> DeletePlayerAsyncCore(Guid playerId, CancellationToken cancellationToken)
+    {
+        var userId = await UserContext.GetUserIdAsync();
+        return await PlayerService.DeletePlayerAsync(userId, playerId, cancellationToken);
+    }
+
     private void NavigateToLogin() =>
         Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("players")}", replace: true);
 
-    private static bool IsUnauthorized(ApiException exception) =>
-        exception.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+    private static bool IsUnauthorized(PlayerException exception) =>
+        exception.StatusCode is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden;
 
     private string SkinModelLabel(SkinModel model) => model == SkinModel.Slim ? L["textures.slim"] : L["textures.default"];
 

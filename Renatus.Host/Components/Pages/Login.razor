@@ -1,5 +1,7 @@
 @page "/login"
 @attribute [AllowAnonymous]
+@using System.Security.Cryptography
+@using System.Text
 
 <PageTitle>@(_registerMode ? L["site.register"] : L["site.login"])</PageTitle>
 
@@ -80,10 +82,10 @@
     private int ActivePanelIndex => _registerMode ? 1 : 0;
 
     [Inject]
-    private SiteApi SiteApi { get; set; } = default!;
+    private SiteService SiteService { get; set; } = default!;
 
     [Inject]
-    private FrontAuthService AuthService { get; set; } = default!;
+    private AuthService AuthService { get; set; } = default!;
 
     [Inject]
     private PendingAuthStore PendingAuthStore { get; set; } = default!;
@@ -96,16 +98,12 @@
         _registerMode = string.Equals(Mode, "register", StringComparison.OrdinalIgnoreCase);
         try
         {
-            var config = SiteApi.GetConfig();
+            var config = SiteService.GetConfig();
             _announcement = config.LoginAnnouncement;
         }
-        catch (ApiException exception)
+        catch (InvalidOperationException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.authLoad"] : exception.Message;
-        }
-        catch (HttpRequestException)
-        {
-            _errorMessage = L["errors.authLoad"];
         }
 
         return Task.CompletedTask;
@@ -125,12 +123,39 @@
 
     private async Task SubmitLogin()
     {
-        await Submit(() => AuthService.LoginAsync(_loginForm));
+        await Submit(() => AuthenticateAsync(_loginForm.Login, _loginForm.Password));
     }
 
     private async Task SubmitRegister()
     {
-        await Submit(() => AuthService.RegisterAsync(_registerForm));
+        await Submit(() => RegisterAsync(_registerForm));
+    }
+
+    private async Task<AuthResponse> AuthenticateAsync(string login, string password)
+    {
+        var sessionKey = await AuthService.CreateSessionKeyAsync(CancellationToken.None);
+        var encryptedPassword = EncryptPassword(sessionKey.PublicKey, password);
+        return await AuthService.LoginAsync(
+            new LoginRequest(sessionKey.SessionKeyId, login, encryptedPassword),
+            CancellationToken.None);
+    }
+
+    private async Task<AuthResponse> RegisterAsync(RegisterForm form)
+    {
+        var sessionKey = await AuthService.CreateSessionKeyAsync(CancellationToken.None);
+        var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
+        return await AuthService.RegisterAsync(
+            new RegisterRequest(sessionKey.SessionKeyId, form.Username, form.Email, form.NickName, encryptedPassword),
+            CancellationToken.None);
+    }
+
+    private static string EncryptPassword(string publicKeyPem, string password)
+    {
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(publicKeyPem);
+        var payload = $"{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.{password}";
+        var encrypted = rsa.Encrypt(Encoding.UTF8.GetBytes(payload), RSAEncryptionPadding.OaepSHA256);
+        return Convert.ToBase64String(encrypted);
     }
 
     private async Task Submit(Func<Task<AuthResponse>> action)
@@ -146,7 +171,7 @@
                 $"/account/signin?key={key}&returnUrl={Uri.EscapeDataString(returnUrl)}",
                 forceLoad: true);
         }
-        catch (ApiException exception)
+        catch (AuthException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.authLoad"] : exception.Message;
         }

@@ -8,14 +8,17 @@ using Renatus.Host.Utils;
 
 namespace Renatus.Host.Service;
 
-public sealed class TextureService(AppDbContext dbContext, ICacheService cacheService)
+public sealed class TextureService(
+    IDbContextFactory<AppDbContext> dbContextFactory,
+    ICacheService cacheService)
 {
     public async Task<TextureDto> UploadTextureAsync(
         Guid userId,
         UploadTextureRequest request,
         CancellationToken cancellationToken)
     {
-        await EnsureUserAvailableAsync(userId, cancellationToken);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureUserAvailableAsync(dbContext, userId, cancellationToken);
         if (request.Type is null)
         {
             throw new TextureException(StatusCodes.Status400BadRequest, "Texture type is required.");
@@ -47,7 +50,8 @@ public sealed class TextureService(AppDbContext dbContext, ICacheService cacheSe
 
     public async Task<UserTexturesResponse> GetUserTexturesAsync(Guid userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAvailableAsync(userId, cancellationToken);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureUserAvailableAsync(dbContext, userId, cancellationToken);
 
         var textures = await dbContext.Textures
             .AsNoTracking()
@@ -61,6 +65,7 @@ public sealed class TextureService(AppDbContext dbContext, ICacheService cacheSe
 
     public async Task<TextureDto> DeleteTextureAsync(Guid userId, Guid textureId, CancellationToken cancellationToken)
     {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var texture = await dbContext.Textures
             .FirstOrDefaultAsync(entity => entity.Id == textureId && entity.UserId == userId, cancellationToken);
         if (texture is null)
@@ -68,7 +73,7 @@ public sealed class TextureService(AppDbContext dbContext, ICacheService cacheSe
             throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
         }
 
-        var affectedUserIds = await ClearPlayerTextureReferencesAsync(texture, cancellationToken);
+        var affectedUserIds = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
         dbContext.Textures.Remove(texture);
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -80,7 +85,10 @@ public sealed class TextureService(AppDbContext dbContext, ICacheService cacheSe
         return ToDto(texture);
     }
 
-    private async Task<Guid[]> ClearPlayerTextureReferencesAsync(Texture texture, CancellationToken cancellationToken)
+    private async Task<Guid[]> ClearPlayerTextureReferencesAsync(
+        AppDbContext dbContext,
+        Texture texture,
+        CancellationToken cancellationToken)
     {
         if (texture.Type == TextureType.Skin)
         {
@@ -114,7 +122,10 @@ public sealed class TextureService(AppDbContext dbContext, ICacheService cacheSe
         return capeAffectedUserIds;
     }
 
-    private async Task EnsureUserAvailableAsync(Guid userId, CancellationToken cancellationToken)
+    private static async Task EnsureUserAvailableAsync(
+        AppDbContext dbContext,
+        Guid userId,
+        CancellationToken cancellationToken)
     {
         var exists = await dbContext.Users
             .AsNoTracking()

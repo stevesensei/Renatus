@@ -68,21 +68,17 @@
     private string HeroDescription => string.IsNullOrWhiteSpace(_config?.Description) ? L["site.heroFallback"] : _config.Description;
 
     [Inject]
-    private SiteApi SiteApi { get; set; } = default!;
+    private SiteService SiteService { get; set; } = default!;
 
     protected override Task OnInitializedAsync()
     {
         try
         {
-            _config = SiteApi.GetConfig();
+            _config = SiteService.GetConfig();
         }
-        catch (ApiException exception)
+        catch (InvalidOperationException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.homeLoad"] : exception.Message;
-        }
-        catch (HttpRequestException)
-        {
-            _errorMessage = L["errors.homeLoad"];
         }
         finally
         {
