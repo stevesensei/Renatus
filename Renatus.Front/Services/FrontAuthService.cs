@@ -31,7 +31,7 @@ public sealed class FrontAuthService
 
     public async Task<AuthUserDto> LoginAsync(LoginForm form, CancellationToken cancellationToken = default)
     {
-        var sessionKey = await _apiClient.GetAsync<SessionKeyResponse>("/api/auth/session-key", cancellationToken);
+        var sessionKey = await _apiClient.PostAsync<SessionKeyResponse>("/api/auth/session-key", null, cancellationToken);
         var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
         return await LoginAsync(new LoginRequest(sessionKey.SessionKeyId, form.Login, encryptedPassword), cancellationToken);
     }
@@ -45,7 +45,7 @@ public sealed class FrontAuthService
 
     public async Task<AuthUserDto> RegisterAsync(RegisterForm form, CancellationToken cancellationToken = default)
     {
-        var sessionKey = await _apiClient.GetAsync<SessionKeyResponse>("/api/auth/session-key", cancellationToken);
+        var sessionKey = await _apiClient.PostAsync<SessionKeyResponse>("/api/auth/session-key", null, cancellationToken);
         var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
         return await RegisterAsync(
             new RegisterRequest(sessionKey.SessionKeyId, form.Username, form.Email, form.NickName, encryptedPassword),
