@@ -2,50 +2,70 @@
 
 <PageTitle>@(_config?.Title ?? L["site.name"])</PageTitle>
 
-<section class="renatus-hero">
-    <div class="renatus-hero-copy">
-        <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["site.eyebrow"]</MudText>
+<section class="renatus-home-page" aria-labelledby="home-title">
+    <div class="renatus-home-media" aria-hidden="true">
+        <img src="/background.jpg" alt="" />
+    </div>
+    <div class="renatus-home-shade" aria-hidden="true"></div>
+    <div class="renatus-home-content renatus-surface-enter">
+        <MudText Typo="Typo.overline" Class="renatus-eyebrow renatus-eyebrow-light">@L["site.eyebrow"]</MudText>
         @if (_loading)
         {
-            <MudSkeleton Animation="Animation.Wave" Height="4rem" Width="75%" />
-            <MudSkeleton Animation="Animation.Wave" Height="2rem" Width="90%" />
-        }
-        else if (_config is not null)
-        {
-            <MudText Typo="Typo.h1" Class="renatus-title">@_config.Title</MudText>
-            <MudText Typo="Typo.body1" Class="renatus-description">@_config.Description</MudText>
-            <div class="renatus-action-stack">
-                @foreach (var button in _config.Buttons.Take(3))
-                {
-                    <MudButton Href="@button.Url" Target="@button.Target" Variant="@ButtonVariant(button.Style)" Color="@ButtonColor(button.Style)" FullWidth="true">
-                        @button.Label
-                        <MudIcon Icon="@Icons.Material.Filled.ArrowOutward" Class="ml-2" />
-                    </MudButton>
-                }
-            </div>
-        }
-    </div>
-    <div class="renatus-hero-image">
-        @if (!string.IsNullOrWhiteSpace(_config?.HeroImage))
-        {
-            <img src="@_config.HeroImage" alt="@_config.Title" />
+            <MudSkeleton Animation="Animation.Wave" Height="4rem" Width="min(28rem, 75vw)" Class="renatus-home-skeleton" />
+            <MudSkeleton Animation="Animation.Wave" Height="2rem" Width="min(36rem, 85vw)" Class="renatus-home-skeleton" />
         }
         else
         {
-            <div class="renatus-hero-placeholder"><MudIcon Icon="@Icons.Material.Filled.Public" Size="Size.Large" /></div>
+            <MudText Typo="Typo.h1" id="home-title" Class="renatus-title renatus-home-title">@HeroTitle</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-description renatus-home-description">@HeroDescription</MudText>
+            <div class="renatus-action-stack">
+                @if (_config?.Buttons.Count > 0)
+                {
+                    @foreach (var button in _config.Buttons.Take(3))
+                    {
+                        <MudButton Href="@button.Url" Target="@button.Target" Variant="@ButtonVariant(button.Style)" Color="@ButtonColor(button.Style)" FullWidth="true" StartIcon="@Icons.Material.Filled.Add">
+                            @button.Label
+                        </MudButton>
+                    }
+                }
+                else
+                {
+                    <AuthorizeView>
+                        <Authorized>
+                            <MudButton Href="/dashboard" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.Dashboard">
+                                @L["nav.dashboard"]
+                            </MudButton>
+                            <MudButton Href="/players" Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true" StartIcon="@Icons.Material.Filled.People">
+                                @L["nav.players"]
+                            </MudButton>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.Login">
+                                @L["site.login"]
+                            </MudButton>
+                            <MudButton Href="/login?mode=register" Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true" StartIcon="@Icons.Material.Filled.PersonAdd">
+                                @L["site.register"]
+                            </MudButton>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                }
+            </div>
         }
     </div>
 </section>
 
 @if (_errorMessage is not null)
 {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" aria-live="polite">@_errorMessage</MudAlert>
+    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="renatus-home-error" aria-live="polite">@_errorMessage</MudAlert>
 }
 
 @code {
     private SiteConfigDto? _config;
     private string? _errorMessage;
     private bool _loading = true;
+
+    private string HeroTitle => string.IsNullOrWhiteSpace(_config?.Title) ? L["site.name"] : _config.Title;
+    private string HeroDescription => string.IsNullOrWhiteSpace(_config?.Description) ? L["site.heroFallback"] : _config.Description;
 
     [Inject]
     private ApiClient ApiClient { get; set; } = default!;
@@ -59,6 +79,10 @@
         catch (ApiException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.homeLoad"] : exception.Message;
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = L["errors.homeLoad"];
         }
         finally
         {

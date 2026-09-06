@@ -1,46 +1,55 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
 
 <MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1" Dense="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label='@L["nav.open"]' OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-2">@L["site.name"]</MudText>
+<MudLayout Class="@LayoutClass">
+    <MudAppBar Elevation="0" Dense="false" Fixed="true" Class="@AppBarClass">
+        <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-brand-button" title='@L["site.name"]' aria-label='@L["site.name"]'>
+            @L["site.name"]
+        </MudButton>
         <MudSpacer />
+        <nav class="renatus-top-nav" aria-label="Primary">
+            <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Home" title='@L["nav.home"]' aria-label='@L["nav.home"]'><span class="renatus-button-text">@L["nav.home"]</span></MudButton>
+            <AuthorizeView>
+                <Authorized>
+                    <MudButton Href="/dashboard" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Dashboard" title='@L["nav.dashboard"]' aria-label='@L["nav.dashboard"]'><span class="renatus-button-text">@L["nav.dashboard"]</span></MudButton>
+                    <MudButton Href="/players" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.People" title='@L["nav.players"]' aria-label='@L["nav.players"]'><span class="renatus-button-text">@L["nav.players"]</span></MudButton>
+                    <MudButton Href="/dashboard#textures" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Palette" title='@L["nav.textures"]' aria-label='@L["nav.textures"]'><span class="renatus-button-text">@L["nav.textures"]</span></MudButton>
+                </Authorized>
+            </AuthorizeView>
+        </nav>
         <AuthorizeView>
             <Authorized>
-                <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-2">@Initials</MudAvatar>
-                <MudText Typo="Typo.body2" Class="mr-2">@_displayName</MudText>
-                <MudButton Color="Color.Inherit" OnClick="@SignOut">@L["site.logout"]</MudButton>
+                <div class="renatus-shell-user">
+                    <MudAvatar Color="Color.Secondary" Size="Size.Small">@Initials</MudAvatar>
+                    <MudText Typo="Typo.body2" Class="renatus-shell-name">@_displayName</MudText>
+                </div>
+                <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-logout-button" StartIcon="@Icons.Material.Filled.Logout" OnClick="@SignOut" title='@L["site.logout"]' aria-label='@L["site.logout"]'><span class="renatus-button-text">@L["site.logout"]</span></MudButton>
             </Authorized>
             <NotAuthorized>
-                <MudButton Color="Color.Inherit" Href="/login">@L["site.login"]</MudButton>
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" Href="/login?mode=register">@L["site.register"]</MudButton>
+                <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-account-button" StartIcon="@Icons.Material.Filled.Login" Href="/login" title='@L["site.login"]' aria-label='@L["site.login"]'><span class="renatus-button-text">@L["site.login"]</span></MudButton>
+                <MudButton Color="@(_isLoginPage ? Color.Inherit : Color.Primary)" Variant="Variant.Filled" Class="renatus-account-button" StartIcon="@Icons.Material.Filled.PersonAdd" Href="/login?mode=register" title='@L["site.register"]' aria-label='@L["site.register"]'><span class="renatus-button-text">@L["site.register"]</span></MudButton>
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md" ClipMode="DrawerClipMode.Always">
-        <MudNavMenu>
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">@L["nav.home"]</MudNavLink>
-            <AuthorizeView>
-                <Authorized>
-                    <MudNavLink Href="/dashboard" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard">@L["nav.dashboard"]</MudNavLink>
-                    <MudNavLink Href="/players" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">@L["nav.players"]</MudNavLink>
-                    <MudNavLink Href="/dashboard#textures" Icon="@Icons.Material.Filled.Palette">@L["nav.textures"]</MudNavLink>
-                </Authorized>
-            </AuthorizeView>
-        </MudNavMenu>
-    </MudDrawer>
-
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    <MudMainContent Class="@MainContentClass">
+        @if (_usesContainedContent)
+        {
+            <MudContainer MaxWidth="MaxWidth.Large" Class="renatus-content-container">
+                @Body
+            </MudContainer>
+        }
+        else
+        {
             @Body
-        </MudContainer>
+        }
     </MudMainContent>
 </MudLayout>
 
@@ -51,8 +60,10 @@
 </div>
 
 @code {
-    private bool _drawerOpen;
     private bool _isDarkMode;
+    private bool _isLoginPage;
+    private bool _isHomePage = true;
+    private bool _usesContainedContent;
     private string? _userName;
     private string? _displayName;
 
@@ -66,9 +77,14 @@
     {
         PaletteLight = new PaletteLight
         {
-            Primary = Colors.Blue.Darken2,
-            Secondary = Colors.Teal.Darken1,
-            AppbarBackground = Colors.Blue.Darken2,
+            Primary = "#5B4BE7",
+            Secondary = "#00A6A6",
+            Tertiary = "#F59E0B",
+            AppbarBackground = "#5B4BE7",
+            Background = "#F4F6F8",
+            Surface = "#FFFFFF",
+            TextPrimary = "#172033",
+            TextSecondary = "#667085",
         },
         LayoutProperties = new LayoutProperties
         {
@@ -78,6 +94,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        UpdateRouteState();
+        Navigation.LocationChanged += HandleLocationChanged;
+
         if (AuthenticationState is not null)
         {
             var state = await AuthenticationState;
@@ -94,7 +113,40 @@
             .Select(part => part[0]))
         .ToUpperInvariant();
 
-    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
-
     private void SignOut() => Navigation.NavigateTo("/account/signout", forceLoad: true);
+
+    private string LayoutClass => _isLoginPage
+        ? "renatus-layout renatus-layout-auth"
+        : _isHomePage
+            ? "renatus-layout renatus-layout-home"
+            : "renatus-layout renatus-layout-app";
+
+    private string AppBarClass => _isLoginPage
+        ? "renatus-appbar renatus-appbar-transparent"
+        : _isHomePage
+            ? "renatus-appbar renatus-appbar-home"
+            : "renatus-appbar renatus-appbar-glass";
+
+    private string MainContentClass => _usesContainedContent
+        ? "renatus-main-content renatus-main-contained"
+        : "renatus-main-content renatus-main-full";
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateRouteState()
+    {
+        var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
+        _isLoginPage = path.Equals("/login", StringComparison.OrdinalIgnoreCase);
+        _isHomePage = path.Equals("/", StringComparison.OrdinalIgnoreCase);
+        _usesContainedContent = !_isLoginPage && !_isHomePage;
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
 }

@@ -10,6 +10,7 @@ using Renatus.Front.Models;
 using Renatus.Front.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseStaticWebAssets();
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("zh-CN");
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
 
@@ -45,6 +46,7 @@ builder.Services.AddHttpClient<ApiClient>((services, client) =>
 builder.Services.AddScoped<FrontSession>();
 builder.Services.AddScoped<FrontAuthService>();
 builder.Services.AddScoped<PlayerApi>();
+builder.Services.AddScoped<TextureApi>();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>

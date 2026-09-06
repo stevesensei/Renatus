@@ -3,4 +3,5 @@
     <File Path="compose.yaml" />
   </Folder>
   <Project Path="Renatus.Host/Renatus.Host.csproj" />
+  <Project Path="Renatus.Front/Renatus.Front.csproj" />
 </Solution>

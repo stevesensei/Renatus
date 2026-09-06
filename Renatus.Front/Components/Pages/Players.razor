@@ -4,14 +4,15 @@
 
 <PageTitle>@L["players.title"]</PageTitle>
 
-<MudStack Spacing="4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="player-toolbar">
+<MudStack Spacing="4" Class="renatus-players">
+    <section class="renatus-page-hero" aria-labelledby="players-title">
         <div>
-            <MudText Typo="Typo.h4" GutterBottom="true">@L["players.title"]</MudText>
-            <MudText Typo="Typo.body1" Color="Color.Secondary">@L["players.description"]</MudText>
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["nav.players"]</MudText>
+            <MudText Typo="Typo.h3" id="players-title">@L["players.title"]</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@L["players.description"]</MudText>
         </div>
-        <MudStack Row="true" Spacing="2">
-            <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadPlayersAsync" Disabled="@_isBusy">
+        <MudStack Row="true" Spacing="2" Class="renatus-toolbar-actions">
+            <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadPlayersAsync" Disabled="@_isBusy">
                 @L["players.refresh"]
             </MudButton>
             <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
@@ -19,11 +20,28 @@
                  @L["players.create"]
             </MudButton>
         </MudStack>
-    </MudStack>
+    </section>
+
+    <div class="renatus-metric-grid">
+        <MudPaper Class="renatus-metric-card" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.caption" Class="renatus-muted">@L["nav.players"]</MudText>
+                <MudText Typo="Typo.h5">@_players.Count / @_maxPlayerCount</MudText>
+            </div>
+        </MudPaper>
+        <MudPaper Class="renatus-metric-card" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Secondary" />
+            <div>
+                <MudText Typo="Typo.caption" Class="renatus-muted">@L["players.create"]</MudText>
+                <MudText Typo="Typo.h5">@(CanCreate ? L["site.ready"] : L["players.full"])</MudText>
+            </div>
+        </MudPaper>
+    </div>
 
     @if (_isLoading)
     {
-        <MudCard Outlined="true" Class="pa-6">
+        <MudCard Outlined="true" Class="renatus-panel renatus-loading-card">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
                 <MudText Color="Color.Secondary">@L["players.loading"]</MudText>
@@ -38,11 +56,11 @@
     }
     else if (_players.Count == 0)
     {
-        <MudCard Outlined="true" Class="pa-6">
+        <MudCard Outlined="true" Class="renatus-panel">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.h6">@L["players.empty"]</MudText>
-                <MudText Color="Color.Secondary">@L["players.emptyDescription"]</MudText>
+                <MudText Class="renatus-muted">@L["players.emptyDescription"]</MudText>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OpenCreateDialogAsync">
                     @L["players.create"]
                 </MudButton>
@@ -51,25 +69,25 @@
     }
     else
     {
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudText Typo="Typo.h6">@L["nav.players"]</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="renatus-panel-heading">
+            <MudText Typo="Typo.h5">@L["nav.players"]</MudText>
             <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_players.Count / @_maxPlayerCount</MudChip>
         </MudStack>
         <MudGrid Spacing="3">
             @foreach (var player in _players)
             {
                 <MudItem xs="12" sm="6" md="4" @key="player.Id">
-                    <MudCard Outlined="true" Class="h-100">
+                    <MudCard Outlined="true" Class="renatus-player-card h-100">
                         <MudCardContent>
                             <MudStack Spacing="2">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudText Typo="Typo.h6">@player.Name</MudText>
+                                    <MudText Typo="Typo.h6" Class="renatus-player-name">@player.Name</MudText>
                                     <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@SkinModelLabel(player.SkinModel)</MudChip>
                                 </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <MudText Typo="Typo.caption" Class="renatus-muted">
                                     @L["players.created"]: @player.CreatedAt.ToLocalTime().ToString("d")
                                 </MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <MudText Typo="Typo.caption" Class="renatus-muted">
                                     @L["players.updated"]: @player.UpdatedAt.ToLocalTime().ToString("d")
                                 </MudText>
                             </MudStack>
@@ -92,6 +110,8 @@
 @code {
     private readonly List<PlayerDto> _players = [];
     private CancellationTokenSource _loadCancellation = new();
+    private readonly object _loadCancellationGate = new();
+    private bool _disposed;
     private bool _isLoading = true;
     private bool _isBusy;
     private int _maxPlayerCount;
@@ -108,11 +128,24 @@
 
     private async Task LoadPlayersAsync()
     {
-        var previousCancellation = _loadCancellation;
+        CancellationTokenSource previousCancellation;
+        CancellationTokenSource requestCancellation;
+        CancellationToken cancellationToken;
+        lock (_loadCancellationGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            previousCancellation = _loadCancellation;
+            requestCancellation = new CancellationTokenSource();
+            _loadCancellation = requestCancellation;
+            cancellationToken = requestCancellation.Token;
+        }
+
         previousCancellation.Cancel();
-        var requestCancellation = new CancellationTokenSource();
-        _loadCancellation = requestCancellation;
-        var cancellationToken = requestCancellation.Token;
+        previousCancellation.Dispose();
         _isLoading = true;
         _errorMessage = null;
 
@@ -140,9 +173,6 @@
             {
                 _isLoading = false;
             }
-
-            previousCancellation.Dispose();
-            requestCancellation.Dispose();
         }
     }
 
@@ -242,7 +272,19 @@
 
     public async ValueTask DisposeAsync()
     {
-        await _loadCancellation.CancelAsync();
-        _loadCancellation.Dispose();
+        CancellationTokenSource cancellation;
+        lock (_loadCancellationGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            cancellation = _loadCancellation;
+        }
+
+        await cancellation.CancelAsync();
+        cancellation.Dispose();
     }
 }

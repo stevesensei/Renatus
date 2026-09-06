@@ -7,9 +7,17 @@ h1:focus { outline: none; }
     --renatus-muted: #667085;
     --renatus-accent: #2563eb;
     --renatus-accent-soft: #dbeafe;
+    --renatus-accent-strong: #5b4be7;
+    --renatus-teal: #00a6a6;
+    --renatus-amber: #f59e0b;
+    --renatus-twilight: #111827;
+    --renatus-glass: rgba(255, 255, 255, 0.72);
+    --renatus-glass-tint: rgba(91, 75, 231, 0.14);
     --renatus-border: #e4e7ec;
     --renatus-error: #b42318;
     --renatus-focus: #1d4ed8;
+    --renatus-shadow-soft: 0 24px 64px rgba(17, 24, 39, 0.14);
+    --renatus-shadow-panel: 0 14px 32px rgba(17, 24, 39, 0.08);
 }
 
 html,
@@ -17,8 +25,16 @@ body {
     overflow-x: hidden;
 }
 
+html,
+body,
+#app {
+    min-height: 100%;
+}
+
 body {
-    background: var(--renatus-page);
+    background:
+        linear-gradient(135deg, rgba(91, 75, 231, 0.08), rgba(0, 166, 166, 0.08)),
+        var(--renatus-page);
     color: var(--renatus-ink);
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
     min-width: 0;
@@ -34,13 +50,202 @@ textarea:focus-visible,
     outline-offset: 2px;
 }
 
+.renatus-layout {
+    min-height: 100dvh;
+    color: var(--renatus-ink);
+}
+
+.renatus-main-content {
+    min-width: 0;
+}
+
+.renatus-main-full {
+    height: 100dvh;
+    min-height: 100dvh;
+    padding-top: 0 !important;
+}
+
+.renatus-layout-home,
+.renatus-layout-auth {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    background:
+        linear-gradient(135deg, rgba(17, 24, 39, 0.5), rgba(17, 24, 39, 0.22)),
+        url('/background.jpg') center / cover no-repeat;
+}
+
+.renatus-layout-home .renatus-main-full,
+.renatus-layout-auth .renatus-main-full {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.renatus-layout-home .mud-main-content,
+.renatus-layout-auth .mud-main-content {
+    height: 100dvh;
+    min-height: 0;
+    padding-top: 0 !important;
+    background: transparent;
+}
+
+.renatus-layout-home .mud-main-content,
+.renatus-layout-auth .mud-main-content,
+.renatus-layout-home .renatus-main-full,
+.renatus-layout-auth .renatus-main-full {
+    margin-top: 0 !important;
+}
+
+.renatus-main-contained {
+    min-height: 100dvh;
+    padding-top: 80px;
+}
+
+.renatus-content-container {
+    padding-block: 32px 48px;
+}
+
+.renatus-appbar {
+    color: var(--renatus-surface);
+    transition: background-color 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.renatus-appbar .mud-toolbar {
+    min-height: 64px;
+    gap: 8px;
+    padding-inline: max(16px, calc((100vw - 1200px) / 2 + 16px));
+}
+
+.renatus-appbar-transparent {
+    background: transparent !important;
+    box-shadow: none;
+}
+
+.renatus-appbar-home {
+    background: transparent !important;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+.renatus-appbar-glass {
+    background: rgba(255, 255, 255, 0.82);
+    border-bottom: 1px solid rgba(228, 231, 236, 0.88);
+    color: var(--renatus-ink);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
+}
+
+.renatus-brand-button {
+    font-weight: 800;
+    text-transform: none;
+}
+
+.renatus-button-text {
+    white-space: nowrap;
+}
+
+.renatus-top-nav,
+.renatus-shell-user,
+.renatus-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.renatus-top-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.renatus-top-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.renatus-shell-name {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.renatus-home-page {
+    position: relative;
+    display: grid;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    background: transparent;
+}
+
+.renatus-home-media,
+.renatus-home-shade,
+.renatus-home-content {
+    grid-area: 1 / 1;
+}
+
+.renatus-home-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 100dvh;
+    object-fit: cover;
+}
+
+.renatus-home-shade {
+    background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.76) 0%, rgba(0, 0, 0, 0.48) 38%, rgba(0, 0, 0, 0.18) 72%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.26) 0%, rgba(0, 0, 0, 0.18) 42%, rgba(0, 0, 0, 0.64) 100%);
+}
+
+.renatus-home-content {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    padding: 64px clamp(32px, 7vw, 160px);
+    margin: 0;
+    color: var(--renatus-surface);
+}
+
+.renatus-home-title {
+    max-width: 44rem;
+    color: var(--renatus-surface);
+    font-size: clamp(3rem, 7vw, 5rem) !important;
+    line-height: 1.05;
+    white-space: nowrap;
+    text-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+}
+
+.renatus-home-description {
+    max-width: 36rem;
+    color: rgba(255, 255, 255, 0.88);
+}
+
+.renatus-home-skeleton {
+    background-color: rgba(255, 255, 255, 0.24);
+}
+
+.renatus-home-error {
+    position: fixed;
+    inset-inline: 24px;
+    bottom: 24px;
+    z-index: 20;
+}
+
 .renatus-hero {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.85fr);
-    gap: 3rem;
+    gap: 48px;
     align-items: center;
-    min-height: 34rem;
-    padding: 4rem 0;
+    min-height: 544px;
+    padding: 64px 0;
     min-width: 0;
 }
 
@@ -51,35 +256,41 @@ textarea:focus-visible,
 
 .renatus-eyebrow {
     color: var(--renatus-accent);
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
+    font-weight: 800;
+}
+
+.renatus-eyebrow-light {
+    color: rgba(255, 255, 255, 0.78);
 }
 
 .renatus-title {
-    margin: 1rem 0;
-    font-weight: 700;
-    letter-spacing: -0.04em;
+    margin: 16px 0;
+    font-weight: 800;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
 }
 
 .renatus-description {
-    max-width: 34rem;
+    max-width: 544px;
     color: var(--renatus-muted);
     line-height: 1.7;
 }
 
 .renatus-action-stack {
     display: grid;
-    gap: 0.75rem;
-    max-width: 20rem;
-    margin-top: 2rem;
+    gap: 12px;
+    max-width: 224px;
+    margin-top: 32px;
 }
 
 .renatus-hero-image,
 .renatus-hero-placeholder {
     min-height: 22rem;
     overflow: hidden;
-    border-radius: 1.5rem;
+    border-radius: 8px;
     background: linear-gradient(145deg, var(--renatus-accent-soft), var(--renatus-surface));
-    box-shadow: 0 1.5rem 4rem rgba(23, 32, 51, 0.12);
+    box-shadow: var(--renatus-shadow-soft);
     min-width: 0;
 }
 
@@ -100,38 +311,67 @@ textarea:focus-visible,
 .renatus-auth-page {
     display: grid;
     place-items: center;
-    min-height: 36rem;
-    padding: 2rem 0;
+    box-sizing: border-box;
+    height: 100dvh;
+    min-height: 0;
+    padding: 72px 24px 24px;
+    overflow: hidden;
+    background: transparent;
 }
 
 .renatus-auth-shell {
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(20rem, 1.1fr);
-    width: min(100%, 56rem);
-    padding: 0.5rem;
-    border-radius: 1.5rem;
-    background: rgba(255, 255, 255, 0.6);
-    box-shadow: 0 1.5rem 4rem rgba(23, 32, 51, 0.12);
+    width: min(100%, 920px);
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    box-shadow: var(--renatus-shadow-soft);
+    backdrop-filter: blur(18px);
     min-width: 0;
+    overflow: hidden;
+    max-height: calc(100dvh - 96px);
 }
 
 .renatus-announcement,
 .renatus-auth-form {
-    padding: 2rem;
-    border-radius: 1.15rem;
+    padding: 48px;
     background: var(--renatus-surface);
+    min-width: 0;
 }
 
 .renatus-announcement {
-    background: linear-gradient(145deg, var(--renatus-accent-soft), var(--renatus-surface));
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background:
+        linear-gradient(145deg, rgba(91, 75, 231, 0.3), rgba(0, 166, 166, 0.18)),
+        rgba(224, 229, 255, 0.36);
+    backdrop-filter: blur(12px) saturate(120%);
 }
 
-.renatus-announcement img {
-    width: 100%;
-    height: 10rem;
-    margin-bottom: 2rem;
-    border-radius: 0.75rem;
-    object-fit: cover;
+.renatus-announcement-title {
+    margin-block: 12px 16px;
+    overflow-wrap: anywhere;
+}
+
+.renatus-announcement-divider {
+    margin-block: 32px;
+}
+
+.renatus-announcement-list .mud-typography {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--renatus-ink);
+}
+
+.renatus-auth-tabs {
+    margin-bottom: 24px;
+}
+
+.renatus-auth-tabs .mud-tabs-toolbar {
+    background: transparent;
 }
 
 .renatus-muted {
@@ -142,6 +382,104 @@ textarea:focus-visible,
     width: 100%;
 }
 
+.renatus-mode-switch {
+    text-transform: none;
+}
+
+.renatus-page-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    min-width: 0;
+    padding: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.86);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72)),
+        linear-gradient(135deg, rgba(91, 75, 231, 0.1), rgba(0, 166, 166, 0.1));
+    box-shadow: var(--renatus-shadow-panel);
+}
+
+.renatus-metric-grid,
+.renatus-dashboard-grid {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.renatus-metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+
+.renatus-dashboard-grid {
+    grid-template-columns: minmax(min(320px, 100%), 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+}
+
+.renatus-metric-card,
+.renatus-panel {
+    border: 1px solid var(--renatus-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: var(--renatus-shadow-panel);
+    min-width: 0;
+}
+
+.renatus-metric-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+}
+
+.renatus-panel {
+    padding: 24px;
+}
+
+.renatus-upload-panel {
+    position: sticky;
+    top: 88px;
+}
+
+.renatus-library-panel {
+    min-height: 420px;
+}
+
+.renatus-panel-heading {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.renatus-empty-state,
+.renatus-loading-card {
+    display: grid;
+    place-items: center;
+    min-height: 240px;
+    text-align: center;
+}
+
+.renatus-texture-card,
+.renatus-player-card {
+    height: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.renatus-texture-card:hover,
+.renatus-player-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--renatus-shadow-panel);
+    border-color: rgba(91, 75, 231, 0.32);
+}
+
+.renatus-selected-file,
+.renatus-player-name {
+    overflow-wrap: anywhere;
+}
+
 .mud-dialog {
     max-width: calc(100vw - 2rem);
 }
@@ -150,9 +488,10 @@ textarea:focus-visible,
     min-width: 0;
 }
 
-.player-toolbar {
+.player-toolbar,
+.renatus-toolbar-actions {
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 16px;
 }
 
 #blazor-error-ui .dismiss {
@@ -163,14 +502,70 @@ textarea:focus-visible,
 }
 
 @media (max-width: 768px) {
+    .renatus-appbar .mud-toolbar {
+        padding-inline: 12px;
+    }
+
+    .renatus-appbar .mud-spacer {
+        display: none;
+    }
+
+    .renatus-brand-button .mud-button-label {
+        max-width: 8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .renatus-top-nav {
+        flex: 0 1 auto;
+        max-width: 48vw;
+    }
+
+    .renatus-nav-button,
+    .renatus-account-button,
+    .renatus-logout-button {
+        flex: 0 0 40px;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        padding: 0 !important;
+    }
+
+    .renatus-nav-button .renatus-button-text,
+    .renatus-account-button .renatus-button-text,
+    .renatus-logout-button .renatus-button-text {
+        display: none;
+    }
+
+    .renatus-nav-button .mud-icon-root,
+    .renatus-account-button .mud-icon-root,
+    .renatus-logout-button .mud-icon-root {
+        margin: 0 !important;
+    }
+
+    .renatus-shell-user {
+        display: none;
+    }
+
+    .renatus-home-content {
+        align-items: center;
+        padding: 48px 24px;
+        text-align: center;
+    }
+
+    .renatus-home-title {
+        max-width: none;
+        font-size: clamp(2.6rem, 14vw, 4.75rem) !important;
+    }
+
     .renatus-hero,
     .renatus-auth-shell {
         grid-template-columns: 1fr;
     }
 
     .renatus-hero {
-        gap: 2rem;
-        padding: 2rem 0;
+        gap: 32px;
+        padding: 32px 0;
     }
 
     .renatus-hero-image,
@@ -180,20 +575,38 @@ textarea:focus-visible,
 
     .renatus-action-stack {
         max-width: none;
+        width: min(100%, 224px);
+        margin-inline: auto;
     }
 
     .renatus-auth-page {
-        min-height: auto;
-        padding: 1rem 0;
+        height: 100dvh;
+        min-height: 0;
+        padding: 72px 16px 16px;
     }
 
     .renatus-auth-shell {
         width: 100%;
+        max-height: calc(100dvh - 88px);
     }
 
     .renatus-announcement,
     .renatus-auth-form {
-        padding: 1.25rem;
+        padding: 24px;
+    }
+
+    .renatus-page-hero {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 24px;
+    }
+
+    .renatus-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .renatus-upload-panel {
+        position: static;
     }
 
     .mud-dialog {
@@ -206,15 +619,15 @@ textarea:focus-visible,
 }
 
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+    outline: 1px solid var(--renatus-teal);
 }
 
 .invalid {
-    outline: 1px solid #e50000;
+    outline: 1px solid var(--renatus-error);
 }
 
 .validation-message {
-    color: #e50000;
+    color: var(--renatus-error);
 }
 
 .blazor-error-boundary {

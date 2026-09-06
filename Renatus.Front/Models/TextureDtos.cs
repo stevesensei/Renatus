@@ -2,14 +2,12 @@ using System.Text.Json.Serialization;
 
 namespace Renatus.Front.Models;
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TextureType
 {
     Skin,
     Cape,
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SkinModel
 {
     Default,
