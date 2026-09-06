@@ -52,7 +52,8 @@ public sealed record PublicTextureDto(
     [property: JsonPropertyName("width")] int Width,
     [property: JsonPropertyName("height")] int Height,
     [property: JsonPropertyName("uploader")] string Uploader,
-    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("isFavorited")] bool IsFavorited);
 
 public sealed record PublicTexturePageResponse(
     [property: JsonPropertyName("textures")] IReadOnlyCollection<PublicTextureDto> Textures,
@@ -73,4 +74,17 @@ public sealed record TexturePreviewDto(
     [property: JsonPropertyName("dataUrl")] string DataUrl,
     [property: JsonPropertyName("uploader")] string Uploader,
     [property: JsonPropertyName("descriptionMarkdown")] string DescriptionMarkdown,
-    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("isFavorited")] bool IsFavorited);
+
+public sealed record FavoriteTextureRequest(
+    [property: Required]
+    [property: JsonPropertyName("textureId")]
+    Guid TextureId);
+
+public sealed record FavoriteTextureResponse(
+    [property: JsonPropertyName("textureId")] Guid TextureId,
+    [property: JsonPropertyName("isFavorited")] bool IsFavorited);
+
+public sealed record UserFavoriteTexturesResponse(
+    [property: JsonPropertyName("textures")] IReadOnlyCollection<TextureDto> Textures);

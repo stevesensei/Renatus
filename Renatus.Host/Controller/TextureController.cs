@@ -21,12 +21,74 @@ public sealed class TextureController(TextureService textureService, TextureLibr
     {
         try
         {
-            var response = await textureLibraryService.GetPublicTexturesAsync(page, pageSize, cancellationToken);
+            var userId = TryGetOptionalUserId();
+            var response = await textureLibraryService.GetPublicTexturesAsync(page, pageSize, userId, cancellationToken);
             return GlobalResponse<PublicTexturePageResponse>.Success(response);
         }
         catch (TextureException exception)
         {
             return GlobalResponse<PublicTexturePageResponse>.ResultError(message: exception.Message);
+        }
+    }
+
+    [HttpPost("favorite")]
+    public async Task<GlobalResponse<FavoriteTextureResponse>> FavoriteTexture(
+        FavoriteTextureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return GlobalResponse<FavoriteTextureResponse>.ResultError(message: "Authorization token is invalid.");
+        }
+
+        try
+        {
+            var response = await textureLibraryService.FavoriteTextureAsync(userId, request.TextureId, cancellationToken);
+            return GlobalResponse<FavoriteTextureResponse>.Success(response);
+        }
+        catch (TextureException exception)
+        {
+            return GlobalResponse<FavoriteTextureResponse>.ResultError(message: exception.Message);
+        }
+    }
+
+    [HttpDelete("favorite/{textureId:guid}")]
+    public async Task<GlobalResponse<FavoriteTextureResponse>> UnfavoriteTexture(
+        Guid textureId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return GlobalResponse<FavoriteTextureResponse>.ResultError(message: "Authorization token is invalid.");
+        }
+
+        try
+        {
+            var response = await textureLibraryService.UnfavoriteTextureAsync(userId, textureId, cancellationToken);
+            return GlobalResponse<FavoriteTextureResponse>.Success(response);
+        }
+        catch (TextureException exception)
+        {
+            return GlobalResponse<FavoriteTextureResponse>.ResultError(message: exception.Message);
+        }
+    }
+
+    [HttpGet("favorite")]
+    public async Task<GlobalResponse<UserFavoriteTexturesResponse>> GetUserFavoriteTextures(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return GlobalResponse<UserFavoriteTexturesResponse>.ResultError(message: "Authorization token is invalid.");
+        }
+
+        try
+        {
+            var response = await textureLibraryService.GetUserFavoriteTexturesAsync(userId, cancellationToken);
+            return GlobalResponse<UserFavoriteTexturesResponse>.Success(response);
+        }
+        catch (TextureException exception)
+        {
+            return GlobalResponse<UserFavoriteTexturesResponse>.ResultError(message: exception.Message);
         }
     }
 
@@ -93,5 +155,11 @@ public sealed class TextureController(TextureService textureService, TextureLibr
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(userIdValue, out userId);
+    }
+
+    private Guid? TryGetOptionalUserId()
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdValue, out var userId) ? userId : null;
     }
 }

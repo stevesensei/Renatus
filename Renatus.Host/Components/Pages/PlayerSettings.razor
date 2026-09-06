@@ -51,20 +51,26 @@
                     else
                     {
                         <MudStack Spacing="2" Class="player-settings-cards">
-                            @foreach (var texture in _skins)
+                            @foreach (var option in _skins)
                             {
-                                <button type="button" class="@($"player-texture-card {(_selectedSkinId == texture.Id ? "is-selected" : string.Empty)}")"
-                                        @onclick="@(() => ToggleSkin(texture.Id))"
-                                        aria-pressed="@(_selectedSkinId == texture.Id ? "true" : "false")">
-                                    <img src="@PreviewUrl(texture.Id)" alt="@texture.Name" class="player-texture-thumb" loading="lazy" />
+                                <button type="button" class="@($"player-texture-card {(_selectedSkinId == option.Texture.Id ? "is-selected" : string.Empty)}")"
+                                        @onclick="@(() => ToggleSkin(option.Texture.Id))"
+                                        aria-pressed="@(_selectedSkinId == option.Texture.Id ? "true" : "false")">
+                                    <img src="@PreviewUrl(option.Texture.Id)" alt="@option.Texture.Name" class="player-texture-thumb" loading="lazy" />
                                     <span class="player-texture-meta">
-                                        <span class="player-texture-name">@texture.Name</span>
-                                        <span class="player-texture-sub">@ModelLabel(texture.SkinModel) · @texture.Width × @texture.Height</span>
+                                        <span class="player-texture-name">@option.Texture.Name</span>
+                                        <span class="player-texture-sub">@ModelLabel(option.Texture.SkinModel) · @option.Texture.Width × @option.Texture.Height</span>
                                     </span>
-                                    @if (_selectedSkinId == texture.Id)
-                                    {
-                                        <span class="player-texture-badge">@L["textures.selected"]</span>
-                                    }
+                                    <span class="player-texture-badges">
+                                        @if (!option.IsOwned)
+                                        {
+                                            <span class="player-texture-source-badge">@L["textures.favorited"]</span>
+                                        }
+                                        @if (_selectedSkinId == option.Texture.Id)
+                                        {
+                                            <span class="player-texture-badge">@L["textures.selected"]</span>
+                                        }
+                                    </span>
                                 </button>
                             }
                         </MudStack>
@@ -80,20 +86,26 @@
                     else
                     {
                         <MudStack Spacing="2" Class="player-settings-cards">
-                            @foreach (var texture in _capes)
+                            @foreach (var option in _capes)
                             {
-                                <button type="button" class="@($"player-texture-card {(_selectedCapeId == texture.Id ? "is-selected" : string.Empty)}")"
-                                        @onclick="@(() => ToggleCape(texture.Id))"
-                                        aria-pressed="@(_selectedCapeId == texture.Id ? "true" : "false")">
-                                    <img src="@PreviewUrl(texture.Id)" alt="@texture.Name" class="player-texture-thumb" loading="lazy" />
+                                <button type="button" class="@($"player-texture-card {(_selectedCapeId == option.Texture.Id ? "is-selected" : string.Empty)}")"
+                                        @onclick="@(() => ToggleCape(option.Texture.Id))"
+                                        aria-pressed="@(_selectedCapeId == option.Texture.Id ? "true" : "false")">
+                                    <img src="@PreviewUrl(option.Texture.Id)" alt="@option.Texture.Name" class="player-texture-thumb" loading="lazy" />
                                     <span class="player-texture-meta">
-                                        <span class="player-texture-name">@texture.Name</span>
-                                        <span class="player-texture-sub">@texture.Width × @texture.Height</span>
+                                        <span class="player-texture-name">@option.Texture.Name</span>
+                                        <span class="player-texture-sub">@option.Texture.Width × @option.Texture.Height</span>
                                     </span>
-                                    @if (_selectedCapeId == texture.Id)
-                                    {
-                                        <span class="player-texture-badge">@L["textures.selected"]</span>
-                                    }
+                                    <span class="player-texture-badges">
+                                        @if (!option.IsOwned)
+                                        {
+                                            <span class="player-texture-source-badge">@L["textures.favorited"]</span>
+                                        }
+                                        @if (_selectedCapeId == option.Texture.Id)
+                                        {
+                                            <span class="player-texture-badge">@L["textures.selected"]</span>
+                                        }
+                                    </span>
                                 </button>
                             }
                         </MudStack>
@@ -186,8 +198,8 @@
 @code {
     private readonly CancellationTokenSource _cancellation = new();
     private PlayerDto? _player;
-    private List<TextureDto> _skins = [];
-    private List<TextureDto> _capes = [];
+    private List<TextureOption> _skins = [];
+    private List<TextureOption> _capes = [];
     private Guid? _selectedSkinId;
     private Guid? _selectedCapeId;
     private SkinModel _skinModel = SkinModel.Default;
@@ -201,6 +213,7 @@
 
     [Inject] private PlayerService PlayerService { get; set; } = default!;
     [Inject] private TextureService TextureService { get; set; } = default!;
+    [Inject] private TextureLibraryService TextureLibraryService { get; set; } = default!;
     [Inject] private FrontendUserContext UserContext { get; set; } = default!;
     [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
@@ -220,10 +233,27 @@
         {
             var userId = await UserContext.GetUserIdAsync();
             var player = await PlayerService.GetPlayerAsync(userId, PlayerId, _cancellation.Token);
-            var textures = await TextureService.GetUserTexturesAsync(userId, _cancellation.Token);
+            var owned = await TextureService.GetUserTexturesAsync(userId, _cancellation.Token);
+            var favorited = await TextureLibraryService.GetUserFavoriteTexturesAsync(userId, _cancellation.Token);
+
+            var ownedById = owned.Textures.ToDictionary(texture => texture.Id);
+            var merged = new List<TextureOption>(owned.Textures.Count + favorited.Textures.Count);
+            foreach (var texture in owned.Textures)
+            {
+                merged.Add(new TextureOption(texture, true));
+            }
+
+            foreach (var texture in favorited.Textures)
+            {
+                if (!ownedById.ContainsKey(texture.Id))
+                {
+                    merged.Add(new TextureOption(texture, false));
+                }
+            }
+
             _player = player;
-            _skins = textures.Textures.Where(texture => texture.Type == TextureType.Skin).ToList();
-            _capes = textures.Textures.Where(texture => texture.Type == TextureType.Cape).ToList();
+            _skins = merged.Where(option => option.Texture.Type == TextureType.Skin).ToList();
+            _capes = merged.Where(option => option.Texture.Type == TextureType.Cape).ToList();
             _selectedSkinId = player.SkinTextureId;
             _selectedCapeId = player.CapeTextureId;
             _skinModel = player.SkinModel;
@@ -292,6 +322,8 @@
 
     private static bool IsUnauthorized(PlayerException exception) =>
         exception.StatusCode is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden;
+
+    private sealed record TextureOption(TextureDto Texture, bool IsOwned);
 
     public async ValueTask DisposeAsync()
     {

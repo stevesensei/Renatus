@@ -366,6 +366,39 @@
     background: var(--renatus-surface);
 }
 
+.skin-favorite-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 7px 14px;
+    border: 1px solid var(--renatus-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--renatus-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.skin-favorite-button:hover {
+    border-color: rgba(220, 38, 38, 0.4);
+    color: #dc2626;
+}
+
+.skin-favorite-button.is-favorited {
+    border-color: rgba(220, 38, 38, 0.35);
+    background: rgba(254, 226, 226, 0.92);
+    color: #dc2626;
+}
+
+.skin-favorite-button.is-busy {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
 .skin-author-mark {
     display: grid;
     place-items: center;

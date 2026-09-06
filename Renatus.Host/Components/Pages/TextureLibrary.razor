@@ -72,6 +72,16 @@
                     <div class="texture-library-media">
                         <img src="@PreviewUrl(texture.Id)" alt="@texture.Name" loading="lazy" width="360" height="280" />
                         <span class="texture-library-card-badge">@SourceLabel(texture.Source)</span>
+                        <button type="button"
+                                class="@($"texture-library-favorite {(_favoriteBusy == texture.Id ? "is-busy" : string.Empty)} {(texture.IsFavorited ? "is-favorited" : string.Empty)}")"
+                                @onclick="@(() => ToggleFavoriteAsync(texture))"
+                                @onclick:stopPropagation="true"
+                                @onclick:preventDefault="true"
+                                aria-pressed="@(texture.IsFavorited ? "true" : "false")"
+                                aria-label="@(texture.IsFavorited ? L["textures.unfavorite"] : L["textures.favorite"])"
+                                title="@(texture.IsFavorited ? L["textures.unfavorite"] : L["textures.favorite"])">
+                            <MudIcon Icon="@(texture.IsFavorited ? Icons.Material.Filled.Favorite : Icons.Material.Filled.FavoriteBorder)" Size="Size.Small" aria-hidden="true" />
+                        </button>
                     </div>
                     <div class="texture-library-card-body">
                         <div class="texture-library-card-heading">
@@ -107,9 +117,12 @@
     private int _page = 1;
     private bool _loading = true;
     private string? _loadError;
+    private Guid? _favoriteBusy;
 
     [Inject] private TextureLibraryService TextureService { get; set; } = default!;
+    [Inject] private FrontendUserContext UserContext { get; set; } = default!;
     [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     private string PageLabel => _response is null || _response.TotalPages == 0
         ? $"1 / 1"
@@ -128,7 +141,8 @@
         _loadError = null;
         try
         {
-            _response = await TextureService.GetPublicTexturesAsync(page, PageSize, _cancellation.Token);
+            var userId = await TryGetUserIdAsync();
+            _response = await TextureService.GetPublicTexturesAsync(page, PageSize, userId, _cancellation.Token);
             _page = _response.Page;
         }
         catch (TextureException exception)
@@ -139,6 +153,66 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task ToggleFavoriteAsync(PublicTextureDto texture)
+    {
+        if (_favoriteBusy is not null)
+        {
+            return;
+        }
+
+        Guid userId;
+        try
+        {
+            userId = await UserContext.GetUserIdAsync();
+        }
+        catch (AuthException)
+        {
+            NavigateToLogin();
+            return;
+        }
+
+        _favoriteBusy = texture.Id;
+        try
+        {
+            if (texture.IsFavorited)
+            {
+                await TextureService.UnfavoriteTextureAsync(userId, texture.Id, _cancellation.Token);
+            }
+            else
+            {
+                await TextureService.FavoriteTextureAsync(userId, texture.Id, _cancellation.Token);
+            }
+
+            await LoadPageAsync(_page);
+        }
+        catch (TextureException)
+        {
+            await LoadPageAsync(_page);
+        }
+        finally
+        {
+            _favoriteBusy = null;
+        }
+    }
+
+    private async Task<Guid?> TryGetUserIdAsync()
+    {
+        try
+        {
+            return await UserContext.GetUserIdAsync();
+        }
+        catch (AuthException)
+        {
+            return null;
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        var returnUrl = Uri.EscapeDataString($"/textures?page={_page}");
+        Navigation.NavigateTo($"/login?returnUrl={returnUrl}", replace: true);
     }
 
     private string PreviewUrl(Guid id) => $"{YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";

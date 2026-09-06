@@ -107,6 +107,26 @@
     white-space: nowrap;
 }
 
+.player-texture-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.player-texture-source-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.12);
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .player-settings-info {
     display: grid;
     gap: 0;

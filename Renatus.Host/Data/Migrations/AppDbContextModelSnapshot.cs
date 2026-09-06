@@ -252,6 +252,24 @@ namespace Renatus.Host.Data.Migrations
                     b.ToTable("UserAuthenticationMethods");
                 });
 
+            modelBuilder.Entity("Renatus.Host.Entity.UserTextureFavorite", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TextureId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "TextureId");
+
+                    b.HasIndex("TextureId");
+
+                    b.ToTable("UserTextureFavorites");
+                });
+
             modelBuilder.Entity("Renatus.Host.Entity.YggdrasilClient", b =>
                 {
                     b.Property<Guid>("Id")
@@ -335,6 +353,25 @@ namespace Renatus.Host.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Renatus.Host.Entity.UserTextureFavorite", b =>
+                {
+                    b.HasOne("Renatus.Host.Entity.Texture", "Texture")
+                        .WithMany()
+                        .HasForeignKey("TextureId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Renatus.Host.Entity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Texture");
 
                     b.Navigation("User");
                 });

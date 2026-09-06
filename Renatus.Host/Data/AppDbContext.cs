@@ -9,6 +9,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UserAuthenticationMethod> UserAuthenticationMethods => Set<UserAuthenticationMethod>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Texture> Textures => Set<Texture>();
+    public DbSet<UserTextureFavorite> UserTextureFavorites => Set<UserTextureFavorite>();
     public DbSet<YggdrasilClient> YggdrasilClients => Set<YggdrasilClient>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -91,6 +92,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(texture => new { texture.IsPublic, texture.Type, texture.CreatedAt });
         });
 
+        modelBuilder.Entity<UserTextureFavorite>(entity =>
+        {
+            entity.HasKey(favorite => new { favorite.UserId, favorite.TextureId });
+            entity.HasOne(favorite => favorite.User)
+                .WithMany()
+                .HasForeignKey(favorite => favorite.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(favorite => favorite.Texture)
+                .WithMany()
+                .HasForeignKey(favorite => favorite.TextureId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(favorite => favorite.TextureId);
+        });
+
         modelBuilder.Entity<YggdrasilClient>(entity =>
         {
             entity.HasKey(client => client.Id);
@@ -151,6 +166,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         }
 
         foreach (var entry in ChangeTracker.Entries<Texture>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<UserTextureFavorite>())
         {
             if (entry.State == EntityState.Added)
             {

@@ -145,6 +145,41 @@
     font-weight: 800;
 }
 
+.texture-library-favorite {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(23, 32, 51, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.86);
+    color: var(--renatus-muted);
+    cursor: pointer;
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.texture-library-favorite:hover {
+    border-color: rgba(220, 38, 38, 0.4);
+    color: #dc2626;
+    transform: scale(1.06);
+}
+
+.texture-library-favorite.is-favorited {
+    border-color: rgba(220, 38, 38, 0.35);
+    background: rgba(254, 226, 226, 0.92);
+    color: #dc2626;
+}
+
+.texture-library-favorite.is-busy {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
 .texture-library-card-body {
     display: grid;
     gap: 8px;

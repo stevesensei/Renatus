@@ -71,6 +71,18 @@ else
         <MudPaper Elevation="4" Class="skin-info-card" aria-labelledby="skin-info-title">
             <div class="skin-info-heading">
                 <MudText Typo="Typo.h5" id="skin-info-title">作者信息</MudText>
+                @if (_texture is not null)
+                {
+                    <button type="button"
+                            class="@($"skin-favorite-button {(_favoriteBusy ? "is-busy" : string.Empty)} {(_texture.IsFavorited ? "is-favorited" : string.Empty)}")"
+                            @onclick="ToggleFavoriteAsync"
+                            aria-pressed="@(_texture.IsFavorited ? "true" : "false")"
+                            aria-label="@(_texture.IsFavorited ? "取消收藏" : "收藏")"
+                            title="@(_texture.IsFavorited ? "取消收藏" : "收藏")">
+                        <MudIcon Icon="@(_texture.IsFavorited ? Icons.Material.Filled.Favorite : Icons.Material.Filled.FavoriteBorder)" Size="Size.Small" aria-hidden="true" />
+                        <span>@(_texture.IsFavorited ? "已收藏" : "收藏")</span>
+                    </button>
+                }
             </div>
 
             <dl class="skin-meta-list">
@@ -117,12 +129,22 @@ else
     private string? _previewError;
     private bool _autoRotate;
     private string _selectedAnimation = "idle";
+    private bool _favoriteBusy;
 
     [SupplyParameterFromQuery(Name = "id")]
     private string? TextureId { get; set; }
 
     [Inject]
     private TextureLibraryService TextureService { get; set; } = default!;
+
+    [Inject]
+    private FrontendUserContext UserContext { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = default!;
 
     [Inject]
     private IJSRuntime JsRuntime { get; set; } = default!;
@@ -146,7 +168,8 @@ else
 
         try
         {
-            var texture = await TextureService.GetPublicPreviewAsync(textureId, CancellationToken.None);
+            var userId = await TryGetUserIdAsync();
+            var texture = await TextureService.GetPublicPreviewAsync(textureId, userId, CancellationToken.None);
             if (texture is null)
             {
                 _previewError = "这份材质不存在，或已经设为私人材质。";
@@ -165,6 +188,66 @@ else
         {
             _isLoading = false;
         }
+    }
+
+    private async Task ToggleFavoriteAsync()
+    {
+        if (_texture is null || _favoriteBusy)
+        {
+            return;
+        }
+
+        Guid userId;
+        try
+        {
+            userId = await UserContext.GetUserIdAsync();
+        }
+        catch (AuthException)
+        {
+            NavigateToLogin();
+            return;
+        }
+
+        _favoriteBusy = true;
+        try
+        {
+            if (_texture.IsFavorited)
+            {
+                await TextureService.UnfavoriteTextureAsync(userId, _texture.Id, CancellationToken.None);
+            }
+            else
+            {
+                await TextureService.FavoriteTextureAsync(userId, _texture.Id, CancellationToken.None);
+            }
+
+            _texture = await TextureService.GetPublicPreviewAsync(_texture.Id, userId, CancellationToken.None);
+        }
+        catch (TextureException exception)
+        {
+            Snackbar.Add(string.IsNullOrWhiteSpace(exception.Message) ? "收藏操作失败，请稍后再试。" : exception.Message, Severity.Error);
+        }
+        finally
+        {
+            _favoriteBusy = false;
+        }
+    }
+
+    private async Task<Guid?> TryGetUserIdAsync()
+    {
+        try
+        {
+            return await UserContext.GetUserIdAsync();
+        }
+        catch (AuthException)
+        {
+            return null;
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        var returnUrl = Uri.EscapeDataString($"/texture/preview?id={TextureId}");
+        Navigation.NavigateTo($"/login?returnUrl={returnUrl}", replace: true);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
