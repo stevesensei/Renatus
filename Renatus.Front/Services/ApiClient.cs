@@ -11,6 +11,7 @@ public sealed class ApiClient
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private readonly HttpClient _httpClient;

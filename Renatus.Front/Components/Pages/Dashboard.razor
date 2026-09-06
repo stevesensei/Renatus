@@ -1,7 +1,253 @@
 @page "/dashboard"
 @attribute [Authorize]
+@implements IDisposable
+@using System.Buffers.Binary
+@using Microsoft.Extensions.Options
 
-<PageTitle>Dashboard</PageTitle>
+<PageTitle>@FrontLabels.Textures</PageTitle>
 
-<h1>Dashboard</h1>
-<p>Protected dashboard placeholder. Player/texture management is implemented in later tasks.</p>
+<MudStack Spacing="3">
+    <div>
+        <MudText Typo="Typo.h4">@FrontLabels.Textures</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@FrontLabels.TextureDescription</MudText>
+    </div>
+
+    <MudPaper id="textures" Class="pa-4" Elevation="1">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h6">@FrontLabels.UploadTexture</MudText>
+            <MudSelect T="TextureType" Label="@FrontLabels.TextureType" @bind-Value="_textureType" @bind-Value:after="RevalidateSelectedFileAsync" Required="true">
+                <MudSelectItem Value="TextureType.Skin">Skin</MudSelectItem>
+                <MudSelectItem Value="TextureType.Cape">@FrontLabels.Cape</MudSelectItem>
+            </MudSelect>
+            @if (_textureType == TextureType.Skin)
+            {
+                <MudSelect T="SkinModel" Label="Skin model" @bind-Value="_skinModel" Required="true">
+                    <MudSelectItem Value="SkinModel.Default">Default</MudSelectItem>
+                    <MudSelectItem Value="SkinModel.Slim">Slim</MudSelectItem>
+                </MudSelect>
+            }
+            <MudCheckBox @bind-Value="_isPublic" Label="@FrontLabels.PublicTexture" Color="Color.Primary" />
+            <MudFileUpload T="IBrowserFile" Accept=".png,image/png" MaximumFileCount="1" MaxFileSize="MaxRawFileSize" OnFilesChanged="HandleFileSelected">
+                <CustomContent>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@context.OpenFilePickerAsync" StartIcon="@Icons.Material.Filled.UploadFile">
+                        @FrontLabels.ChoosePng
+                    </MudButton>
+                </CustomContent>
+            </MudFileUpload>
+            @if (_selectedFile is not null)
+            {
+                <MudText Typo="Typo.body2">Selected: @_selectedFile.Name (@FormatBytes(_selectedFile.Size))</MudText>
+            }
+            @if (_validationMessage is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_validationMessage</MudAlert>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_selectedFile is null || _validationMessage is not null || _uploading)" OnClick="UploadAsync" StartIcon="@Icons.Material.Filled.CloudUpload">
+                @(_uploading ? FrontLabels.TextureLoading : FrontLabels.UploadTexture)
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudText Typo="Typo.h6">@FrontLabels.Textures</MudText>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-3" />
+        }
+        else if (_loadError is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_loadError</MudAlert>
+        }
+        else if (_textures.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">@FrontLabels.NoTextures</MudText>
+        }
+        else
+        {
+            <MudGrid Class="mt-1">
+                @foreach (var texture in _textures)
+                {
+                    <MudItem xs="12" sm="6" md="4" @key="texture.Id">
+                        <MudCard>
+                            <div role="img" aria-label="@($"{texture.Type} texture preview")">
+                                <MudCardMedia Image="@PreviewUrl(texture.Id)" Height="180" />
+                            </div>
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle1">@texture.Type</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@texture.Width x @texture.Height · @(texture.IsPublic ? "Public" : "Private")</MudText>
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Color="Color.Error" Variant="Variant.Text" Disabled="@_deletingIds.Contains(texture.Id)" OnClick="@(() => DeleteAsync(texture))">Delete</MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudPaper>
+</MudStack>
+
+@code {
+    private const long MaxRawFileSize = 2 * 1024 * 1024;
+    private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+
+    private readonly List<TextureDto> _textures = [];
+    private readonly HashSet<Guid> _deletingIds = [];
+    private readonly CancellationTokenSource _cancellation = new();
+    private IBrowserFile? _selectedFile;
+    private TextureType _textureType = TextureType.Skin;
+    private SkinModel _skinModel = SkinModel.Default;
+    private bool _isPublic;
+    private bool _loading = true;
+    private bool _uploading;
+    private string? _validationMessage;
+    private string? _loadError;
+
+    [Inject] private ApiClient ApiClient { get; set; } = default!;
+    [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await ApiClient.GetAsync<UserTexturesResponse>("/api/texture", _cancellation.Token);
+            _textures.AddRange(response.Textures);
+        }
+        catch (ApiException exception)
+        {
+            _loadError = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        _selectedFile = args.GetMultipleFiles(1).SingleOrDefault();
+        _validationMessage = _selectedFile is null ? null : await ValidateFileAsync(_selectedFile);
+    }
+
+    private async Task RevalidateSelectedFileAsync()
+    {
+        _validationMessage = _selectedFile is null ? null : await ValidateFileAsync(_selectedFile);
+    }
+
+    private async Task<string?> ValidateFileAsync(IBrowserFile file)
+    {
+        if (file.Size > MaxRawFileSize)
+        {
+            return FrontLabels.TextureTooLarge;
+        }
+
+        if (!file.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(file.ContentType, "image/png", StringComparison.OrdinalIgnoreCase))
+        {
+            return FrontLabels.InvalidPngType;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxRawFileSize, _cancellation.Token);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, _cancellation.Token);
+            var dimensions = ReadPngDimensions(memory.ToArray());
+            if (!IsAllowedSize(_textureType, dimensions.Width, dimensions.Height))
+            {
+                return _textureType == TextureType.Skin
+                    ? FrontLabels.InvalidSkinSize
+                    : FrontLabels.InvalidCapeSize;
+            }
+        }
+        catch (InvalidDataException)
+        {
+            return FrontLabels.InvalidPng;
+        }
+
+        return null;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_selectedFile is null || _validationMessage is not null)
+        {
+            return;
+        }
+
+        _uploading = true;
+        try
+        {
+            await using var stream = _selectedFile.OpenReadStream(MaxRawFileSize, _cancellation.Token);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, _cancellation.Token);
+            var dataUrl = $"data:image/png;base64,{Convert.ToBase64String(memory.ToArray())}";
+            var request = new UploadTextureRequest(_textureType, dataUrl, _isPublic, _skinModel);
+            var texture = await ApiClient.PostAsync<TextureDto>("/api/texture", request, _cancellation.Token);
+            _textures.Insert(0, texture);
+            _selectedFile = null;
+        }
+        catch (ApiException exception)
+        {
+            _validationMessage = exception.Message;
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task DeleteAsync(TextureDto texture)
+    {
+        _deletingIds.Add(texture.Id);
+        try
+        {
+            await ApiClient.DeleteAsync<TextureDto>($"/api/texture/{texture.Id}", _cancellation.Token);
+            _textures.Remove(texture);
+        }
+        catch (ApiException exception)
+        {
+            _loadError = exception.Message;
+        }
+        finally
+        {
+            _deletingIds.Remove(texture.Id);
+        }
+    }
+
+    private string PreviewUrl(Guid id)
+    {
+        var baseUrl = YggdrasilOptions.Value.PublicBaseUrl.AbsoluteUri.TrimEnd('/') + "/";
+        return new Uri(new Uri(baseUrl), $"api/yggdrasil/textures/{id:N}.png").ToString();
+    }
+
+    private static (int Width, int Height) ReadPngDimensions(byte[] bytes)
+    {
+        if (bytes.Length < 24 || !bytes.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature)
+            || !bytes.AsSpan(12, 4).SequenceEqual("IHDR"u8))
+        {
+            throw new InvalidDataException();
+        }
+
+        var width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4));
+        var height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4));
+        return width > 0 && height > 0 ? (width, height) : throw new InvalidDataException();
+    }
+
+    private static bool IsAllowedSize(TextureType type, int width, int height)
+    {
+        var widthMultiple = width / 64;
+        if (widthMultiple <= 0 || width % 64 != 0)
+        {
+            return false;
+        }
+
+        return type == TextureType.Skin
+            ? height == 32 * widthMultiple || height == 64 * widthMultiple
+            : height == 32 * widthMultiple;
+    }
+
+    private static string FormatBytes(long bytes) => $"{bytes / 1024d:N1} KiB";
+
+    public void Dispose() => _cancellation.Cancel();
+}

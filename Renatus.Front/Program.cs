@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Renatus.Front.Components;
 using Renatus.Front.Models;
@@ -17,6 +18,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddOptions<ApiOptions>()
     .Bind(builder.Configuration.GetSection(ApiOptions.SectionName))
     .Validate(options => options.BaseUrl.IsAbsoluteUri, "Api:BaseUrl must be an absolute URI.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<YggdrasilOptions>()
+    .Bind(builder.Configuration.GetSection(YggdrasilOptions.SectionName))
+    .Validate(options => options.PublicBaseUrl.IsAbsoluteUri, "Yggdrasil:PublicBaseUrl must be an absolute URI.")
     .ValidateOnStart();
 
 builder.Services.AddTransient<BearerTokenHandler>();
