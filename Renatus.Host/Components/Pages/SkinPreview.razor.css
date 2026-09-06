@@ -122,7 +122,7 @@
 
 .skin-detail-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.8fr);
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.8fr);
     gap: 24px;
     align-items: start;
 }
@@ -521,6 +521,10 @@
 
     .skin-info-footnote {
         margin-inline: 20px;
+    }
+
+    .skin-animation-button {
+        flex: 0 0 auto;
     }
 }
 

@@ -370,6 +370,23 @@ textarea:focus-visible,
     color: var(--renatus-ink);
 }
 
+.renatus-announcement-card {
+    display: flex;
+    background:
+        linear-gradient(145deg, rgba(91, 75, 231, 0.18), rgba(0, 166, 166, 0.12)),
+        rgba(224, 229, 255, 0.36);
+    backdrop-filter: blur(12px) saturate(120%);
+    min-width: 0;
+}
+
+.renatus-announcement-image {
+    width: 100%;
+    max-height: 320px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--renatus-border);
+}
+
 .renatus-auth-tabs {
     margin-bottom: 24px;
 }
@@ -441,22 +458,12 @@ textarea:focus-visible,
     padding: 24px;
 }
 
-.renatus-upload-panel {
-    position: sticky;
-    top: 88px;
-}
-
-.renatus-library-panel {
-    min-height: 420px;
-}
-
 .renatus-panel-heading {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 12px;
 }
 
-.renatus-empty-state,
 .renatus-loading-card {
     display: grid;
     place-items: center;
@@ -464,7 +471,6 @@ textarea:focus-visible,
     text-align: center;
 }
 
-.renatus-texture-card,
 .renatus-player-card {
     height: 100%;
     border-radius: 8px;
@@ -472,14 +478,12 @@ textarea:focus-visible,
     transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.renatus-texture-card:hover,
 .renatus-player-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--renatus-shadow-panel);
     border-color: rgba(91, 75, 231, 0.32);
 }
 
-.renatus-selected-file,
 .renatus-player-name {
     overflow-wrap: anywhere;
 }
@@ -607,10 +611,6 @@ textarea:focus-visible,
 
     .renatus-dashboard-grid {
         grid-template-columns: 1fr;
-    }
-
-    .renatus-upload-panel {
-        position: static;
     }
 
     .mud-dialog {

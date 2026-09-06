@@ -88,12 +88,12 @@
                                     @L["players.created"]: @player.CreatedAt.ToLocalTime().ToString("d")
                                 </MudText>
                                 <MudText Typo="Typo.caption" Class="renatus-muted">
-                                    @L["players.updated"]: @player.UpdatedAt.ToLocalTime().ToString("d")
+                                    @L["players.optionalGuid"]: @player.Id.ToString("D")
                                 </MudText>
                             </MudStack>
                         </MudCardContent>
                         <MudCardActions>
-                            <MudButton StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => OpenEditDialogAsync(player))">
+                            <MudButton StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => Navigation.NavigateTo($"/players/{player.Id}/settings"))">
                             @L["players.editTextures"]
                             </MudButton>
                             <MudSpacer />
@@ -193,28 +193,6 @@
             L["players.createdFeedback"]);
     }
 
-    private async Task OpenEditDialogAsync(PlayerDto player)
-    {
-        var parameters = new DialogParameters<PlayerEditorDialog>
-        {
-            { dialog => dialog.Player, player },
-        };
-        var dialog = await DialogService.ShowAsync<PlayerEditorDialog>(L["players.editTextures"], parameters);
-        var result = await dialog.Result;
-        if (result is null || result.Canceled || result.Data is not PlayerEditorDialog.PlayerEditorResult editor)
-        {
-            return;
-        }
-
-        await RunMutationAsync(
-            () => UpdatePlayerTexturesAsync(
-                player.Id,
-                new UpdatePlayerTexturesRequest(editor.SkinTextureId, editor.CapeTextureId, editor.SkinModel),
-                _loadCancellation.Token),
-            L["errors.playerUpdate"],
-            L["players.updatedFeedback"]);
-    }
-
     private async Task DeletePlayerAsync(PlayerDto player)
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
@@ -268,15 +246,6 @@
     {
         var userId = await UserContext.GetUserIdAsync();
         return await PlayerService.CreatePlayerAsync(userId, request, cancellationToken);
-    }
-
-    private async Task<PlayerDto> UpdatePlayerTexturesAsync(
-        Guid playerId,
-        UpdatePlayerTexturesRequest request,
-        CancellationToken cancellationToken)
-    {
-        var userId = await UserContext.GetUserIdAsync();
-        return await PlayerService.UpdatePlayerTexturesAsync(userId, playerId, request, cancellationToken);
     }
 
     private async Task<DeletePlayerResponse> DeletePlayerAsyncCore(Guid playerId, CancellationToken cancellationToken)

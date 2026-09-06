@@ -1,8 +1,6 @@
 @page "/dashboard"
 @attribute [Authorize]
 @implements IDisposable
-@using System.Buffers.Binary
-@using Microsoft.Extensions.Options
 
 <PageTitle>@L["textures.title"]</PageTitle>
 
@@ -18,139 +16,59 @@
         </MudButton>
     </section>
 
-    <div class="renatus-metric-grid">
-        <MudPaper Class="renatus-metric-card" Elevation="0">
-            <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" />
-            <div>
-                <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.title"]</MudText>
-                <MudText Typo="Typo.h5">@_textures.Count</MudText>
-            </div>
-        </MudPaper>
-        <MudPaper Class="renatus-metric-card" Elevation="0">
-            <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Secondary" />
-            <div>
-                <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.publicStatus"]</MudText>
-                <MudText Typo="Typo.h5">@_textures.Count(texture => texture.IsPublic)</MudText>
-            </div>
-        </MudPaper>
-        <MudPaper Class="renatus-metric-card" Elevation="0">
-            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Tertiary" />
-            <div>
-                <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.upload"]</MudText>
-                <MudText Typo="Typo.h5">@(_uploading ? L["textures.loading"] : L["site.ready"])</MudText>
-            </div>
-        </MudPaper>
-    </div>
+    @if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="renatus-dashboard-error" aria-live="polite">@_loadError</MudAlert>
+    }
 
-    <div class="renatus-dashboard-grid" id="textures">
-        <MudPaper Class="renatus-panel renatus-upload-panel" Elevation="0">
-            <MudStack Spacing="3">
+    <div class="renatus-dashboard-grid">
+        <div class="renatus-metric-grid">
+            <MudPaper Class="renatus-metric-card" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" />
                 <div>
-                    <MudText Typo="Typo.h5">@L["textures.upload"]</MudText>
-                    <MudText Typo="Typo.body2" Class="renatus-muted">@L["textures.uploadHint"]</MudText>
+                    <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.title"]</MudText>
+                    <MudText Typo="Typo.h5">@_textures.Count</MudText>
                 </div>
-                <MudSelect T="TextureType" Label='@L["textures.type"]' @bind-Value="_textureType" @bind-Value:after="RevalidateSelectedFileAsync" Required="true">
-                    <MudSelectItem Value="TextureType.Skin">@L["textures.skin"]</MudSelectItem>
-                    <MudSelectItem Value="TextureType.Cape">@L["textures.cape"]</MudSelectItem>
-                </MudSelect>
-                @if (_textureType == TextureType.Skin)
-                {
-                    <MudSelect T="SkinModel" Label='@L["textures.skinModel"]' @bind-Value="_skinModel" Required="true">
-                        <MudSelectItem Value="SkinModel.Default">@L["textures.default"]</MudSelectItem>
-                        <MudSelectItem Value="SkinModel.Slim">@L["textures.slim"]</MudSelectItem>
-                    </MudSelect>
-                }
-                <MudCheckBox @bind-Value="_isPublic" Label='@L["textures.public"]' Color="Color.Primary" />
-                <MudFileUpload T="IBrowserFile" Accept=".png,image/png" MaximumFileCount="1" MaxFileSize="MaxRawFileSize" OnFilesChanged="HandleFileSelected">
-                    <CustomContent>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="@context.OpenFilePickerAsync" StartIcon="@Icons.Material.Filled.UploadFile">
-                            @L["textures.choosePng"]
-                        </MudButton>
-                    </CustomContent>
-                </MudFileUpload>
-                @if (_selectedFile is not null)
-                {
-                    <MudText Typo="Typo.body2" Class="renatus-selected-file">@L["textures.selected"]: @_selectedFile.Name (@FormatBytes(_selectedFile.Size))</MudText>
-                }
-                @if (_validationMessage is not null)
-                {
-                    <MudAlert Severity="Severity.Error" Dense="true" aria-live="polite">@_validationMessage</MudAlert>
-                }
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_selectedFile is null || _validationMessage is not null || _uploading)" OnClick="UploadAsync" StartIcon="@Icons.Material.Filled.CloudUpload">
-                    @(_uploading ? L["textures.loading"] : L["textures.upload"])
-                </MudButton>
-            </MudStack>
-        </MudPaper>
+            </MudPaper>
+            <MudPaper Class="renatus-metric-card" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Secondary" />
+                <div>
+                    <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.publicStatus"]</MudText>
+                    <MudText Typo="Typo.h5">@_textures.Count(texture => texture.IsPublic)</MudText>
+                </div>
+            </MudPaper>
+            <MudPaper Class="renatus-metric-card" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Tertiary" />
+                <div>
+                    <MudText Typo="Typo.caption" Class="renatus-muted">@L["textures.upload"]</MudText>
+                    <MudText Typo="Typo.h5">@_textures.Count(texture => !texture.IsPublic)</MudText>
+                </div>
+            </MudPaper>
+        </div>
 
-        <MudPaper Class="renatus-panel renatus-library-panel" Elevation="0">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="renatus-panel-heading">
-            <div>
-                <MudText Typo="Typo.h5">@L["textures.title"]</MudText>
-                <MudText Typo="Typo.body2" Class="renatus-muted">@L["textures.libraryHint"]</MudText>
-            </div>
-            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">@_textures.Count</MudChip>
-        </MudStack>
-        @if (_loading)
-        {
-            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-3" aria-label='@L["textures.loading"]' />
-        }
-        else if (_loadError is not null)
-        {
-            <MudAlert Severity="Severity.Error" Class="mt-3" aria-live="polite">@_loadError</MudAlert>
-        }
-        else if (_textures.Count == 0)
-        {
-            <div class="renatus-empty-state">
-                <MudIcon Icon="@Icons.Material.Filled.ImageNotSupported" Size="Size.Large" Color="Color.Primary" />
-                <MudText Typo="Typo.h6">@L["textures.noTextures"]</MudText>
-                <MudText Typo="Typo.body2" Class="renatus-muted">@L["textures.uploadHint"]</MudText>
-            </div>
-        }
-        else
-        {
-            <MudGrid Class="mt-2">
-                @foreach (var texture in _textures)
+        <MudPaper Class="renatus-panel renatus-announcement-card" Elevation="0">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["site.announcement"]</MudText>
+                <MudText Typo="Typo.h5" Class="renatus-announcement-title">@(_announcement?.Title ?? L["site.welcome"])</MudText>
+                <MudText Typo="Typo.body1" Class="renatus-muted">@(_announcement?.Body ?? L["site.signInToContinue"])</MudText>
+                @if (!string.IsNullOrWhiteSpace(_announcement?.Image))
                 {
-                    <MudItem xs="12" sm="6" lg="4" @key="texture.Id">
-                        <MudCard Class="renatus-texture-card">
-                            <div role="img" aria-label="@($"{TextureTypeLabel(texture.Type)} {L["textures.preview"]}")">
-                                <MudCardMedia Image="@PreviewUrl(texture.Id)" Height="160" />
-                            </div>
-                            <MudCardContent>
-                                <MudText Typo="Typo.subtitle1">@TextureTypeLabel(texture.Type)</MudText>
-                                <MudText Typo="Typo.body2" Class="renatus-muted">@texture.Width x @texture.Height · @(texture.IsPublic ? L["textures.publicStatus"] : L["textures.privateStatus"])</MudText>
-                            </MudCardContent>
-                            <MudCardActions>
-                                <MudButton Color="Color.Error" Variant="Variant.Text" Disabled="@_deletingIds.Contains(texture.Id)" OnClick="@(() => DeleteAsync(texture))">@L["textures.delete"]</MudButton>
-                            </MudCardActions>
-                        </MudCard>
-                    </MudItem>
+                    <img class="renatus-announcement-image" src="@_announcement.Image" alt="@(_announcement?.Title ?? L["site.announcement"])" loading="lazy" />
                 }
-            </MudGrid>
-        }
+            </MudStack>
         </MudPaper>
     </div>
 </MudStack>
 
 @code {
-    private const long MaxRawFileSize = 2 * 1024 * 1024;
-    private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
-
     private readonly List<TextureDto> _textures = [];
-    private readonly HashSet<Guid> _deletingIds = [];
     private readonly CancellationTokenSource _cancellation = new();
-    private IBrowserFile? _selectedFile;
-    private TextureType _textureType = TextureType.Skin;
-    private SkinModel _skinModel = SkinModel.Default;
-    private bool _isPublic;
-    private bool _loading = true;
-    private bool _uploading;
-    private string? _validationMessage;
+    private SiteAnnouncementDto? _announcement;
     private string? _loadError;
 
     [Inject] private TextureService TextureService { get; set; } = default!;
     [Inject] private FrontendUserContext UserContext { get; set; } = default!;
-    [Inject] private IOptions<Renatus.Host.Data.Config.YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+    [Inject] private SiteService SiteService { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,141 +82,17 @@
         {
             _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private async Task HandleFileSelected(InputFileChangeEventArgs args)
-    {
-        _selectedFile = args.GetMultipleFiles(1).SingleOrDefault();
-        _validationMessage = _selectedFile is null ? null : await ValidateFileAsync(_selectedFile);
-    }
-
-    private async Task RevalidateSelectedFileAsync()
-    {
-        _validationMessage = _selectedFile is null ? null : await ValidateFileAsync(_selectedFile);
-    }
-
-    private async Task<string?> ValidateFileAsync(IBrowserFile file)
-    {
-        if (file.Size > MaxRawFileSize)
-        {
-            return L["textures.fileTooLarge"];
-        }
-
-        if (!file.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(file.ContentType, "image/png", StringComparison.OrdinalIgnoreCase))
-        {
-            return L["textures.invalidType"];
-        }
 
         try
         {
-            await using var stream = file.OpenReadStream(MaxRawFileSize, _cancellation.Token);
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, _cancellation.Token);
-            var dimensions = ReadPngDimensions(memory.ToArray());
-            if (!IsAllowedSize(_textureType, dimensions.Width, dimensions.Height))
-            {
-                return _textureType == TextureType.Skin
-                        ? L["textures.invalidSkinSize"]
-                        : L["textures.invalidCapeSize"];
-            }
+            var config = SiteService.GetConfig();
+            _announcement = config.LoginAnnouncement;
         }
-        catch (InvalidDataException)
+        catch (InvalidOperationException)
         {
-            return L["textures.invalidPng"];
-        }
-
-        return null;
-    }
-
-    private async Task UploadAsync()
-    {
-        if (_selectedFile is null || _validationMessage is not null)
-        {
-            return;
-        }
-
-        _uploading = true;
-        try
-        {
-            await using var stream = _selectedFile.OpenReadStream(MaxRawFileSize, _cancellation.Token);
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, _cancellation.Token);
-            var dataUrl = $"data:image/png;base64,{Convert.ToBase64String(memory.ToArray())}";
-            var request = new UploadTextureRequest(_textureType, dataUrl, _isPublic, _skinModel);
-            var userId = await UserContext.GetUserIdAsync();
-            var texture = await TextureService.UploadTextureAsync(userId, request, _cancellation.Token);
-            _textures.Insert(0, texture);
-            _selectedFile = null;
-        }
-        catch (TextureException exception)
-        {
-            _validationMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.upload"] : exception.Message;
-        }
-        finally
-        {
-            _uploading = false;
+            // Announcement falls back to default copy; no blocking error.
         }
     }
-
-    private async Task DeleteAsync(TextureDto texture)
-    {
-        _deletingIds.Add(texture.Id);
-        try
-        {
-            var userId = await UserContext.GetUserIdAsync();
-            await TextureService.DeleteTextureAsync(userId, texture.Id, _cancellation.Token);
-            _textures.Remove(texture);
-        }
-        catch (TextureException exception)
-        {
-            _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
-        }
-        finally
-        {
-            _deletingIds.Remove(texture.Id);
-        }
-    }
-
-    private string PreviewUrl(Guid id)
-    {
-        var baseUrl = YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/') + "/";
-        return new Uri(new Uri(baseUrl), $"api/yggdrasil/textures/{id:N}.png").ToString();
-    }
-
-    private string TextureTypeLabel(TextureType type) => type == TextureType.Cape ? L["textures.cape"] : L["textures.skin"];
-
-    private static (int Width, int Height) ReadPngDimensions(byte[] bytes)
-    {
-        if (bytes.Length < 24 || !bytes.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature)
-            || !bytes.AsSpan(12, 4).SequenceEqual("IHDR"u8))
-        {
-            throw new InvalidDataException();
-        }
-
-        var width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4));
-        var height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4));
-        return width > 0 && height > 0 ? (width, height) : throw new InvalidDataException();
-    }
-
-    private static bool IsAllowedSize(TextureType type, int width, int height)
-    {
-        var widthMultiple = width / 64;
-        if (widthMultiple <= 0 || width % 64 != 0)
-        {
-            return false;
-        }
-
-        return type == TextureType.Skin
-            ? height == 32 * widthMultiple || height == 64 * widthMultiple
-            : height == 32 * widthMultiple;
-    }
-
-    private static string FormatBytes(long bytes) => $"{bytes / 1024d:N1} KiB";
 
     public void Dispose() => _cancellation.Cancel();
 }
