@@ -9,8 +9,8 @@ public enum TextureType
 public sealed class Texture
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; }
-    public User User { get; set; } = null!;
+    public Guid? UserId { get; set; }
+    public User? User { get; set; }
     public TextureType Type { get; set; }
     public bool IsPublic { get; set; }
     public SkinModel SkinModel { get; set; }

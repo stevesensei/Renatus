@@ -3,13 +3,14 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Service;
 using Renatus.Host.Service.Cache;
 using Renatus.Host.Utils;
+using Scalar.AspNetCore;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,17 +68,10 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "Input JWT as: Bearer {token}"
     });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
+            new OpenApiSecuritySchemeReference("Bearer", document, null),
             []
         }
     });
@@ -100,7 +94,11 @@ app.Use(async (context, next) =>
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapScalarApiReference(options =>
+    {
+        options.AddDocument("v1", "Renatus API", "/swagger/v1/swagger.json");
+        options.WithTitle("Renatus API");
+    });
 }
 
 app.UseHttpsRedirection();
