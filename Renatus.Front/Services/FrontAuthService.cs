@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -27,11 +29,27 @@ public sealed class FrontAuthService
         return response.User;
     }
 
+    public async Task<AuthUserDto> LoginAsync(LoginForm form, CancellationToken cancellationToken = default)
+    {
+        var sessionKey = await _apiClient.GetAsync<SessionKeyResponse>("/api/auth/session-key", cancellationToken);
+        var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
+        return await LoginAsync(new LoginRequest(sessionKey.SessionKeyId, form.Login, encryptedPassword), cancellationToken);
+    }
+
     public async Task<AuthUserDto> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
         var response = await _apiClient.PostAsync<AuthResponse>("/api/auth/register", request, cancellationToken);
         await SignInAsync(response);
         return response.User;
+    }
+
+    public async Task<AuthUserDto> RegisterAsync(RegisterForm form, CancellationToken cancellationToken = default)
+    {
+        var sessionKey = await _apiClient.GetAsync<SessionKeyResponse>("/api/auth/session-key", cancellationToken);
+        var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
+        return await RegisterAsync(
+            new RegisterRequest(sessionKey.SessionKeyId, form.Username, form.Email, form.NickName, encryptedPassword),
+            cancellationToken);
     }
 
     public async Task SignOutAsync()
@@ -58,6 +76,7 @@ public sealed class FrontAuthService
         {
             new Claim(ClaimTypes.NameIdentifier, response.User.Id.ToString()),
             new Claim(ClaimTypes.Name, response.User.Username),
+            new Claim(ClaimTypes.GivenName, response.User.NickName),
             new Claim(ClaimTypes.Role, response.User.Role.ToString()),
         };
 
@@ -80,5 +99,14 @@ public sealed class FrontAuthService
             CookieAuthenticationDefaults.AuthenticationScheme,
             principal,
             properties);
+    }
+
+    private static string EncryptPassword(string publicKeyPem, string password)
+    {
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(publicKeyPem);
+        var payload = $"{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.{password}";
+        var encrypted = rsa.Encrypt(Encoding.UTF8.GetBytes(payload), RSAEncryptionPadding.OaepSHA256);
+        return Convert.ToBase64String(encrypted);
     }
 }

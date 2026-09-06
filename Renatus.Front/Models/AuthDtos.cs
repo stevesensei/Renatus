@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 
 namespace Renatus.Front.Models;
 
@@ -37,3 +38,31 @@ public sealed record AuthUserDto(
     [property: JsonPropertyName("nickName")] string NickName,
     [property: JsonPropertyName("email")] string Email,
     [property: JsonPropertyName("role")] UserRole Role);
+
+public sealed class LoginForm
+{
+    [Required(ErrorMessage = "Login is required.")]
+    public string Login { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Password is required.")]
+    public string Password { get; set; } = string.Empty;
+}
+
+public sealed class RegisterForm
+{
+    [Required(ErrorMessage = "Username is required.")]
+    [StringLength(64)]
+    public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Email is required.")]
+    [EmailAddress]
+    [StringLength(256)]
+    public string Email { get; set; } = string.Empty;
+
+    [StringLength(64)]
+    public string NickName { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Password is required.")]
+    [StringLength(128, MinimumLength = 1)]
+    public string Password { get; set; } = string.Empty;
+}

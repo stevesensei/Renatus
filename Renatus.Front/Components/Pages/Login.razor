@@ -1,7 +1,127 @@
 @page "/login"
 @attribute [AllowAnonymous]
 
-<PageTitle>Login</PageTitle>
+<PageTitle>@(_registerMode ? SiteLabels.Register : SiteLabels.Login)</PageTitle>
 
-<h1>Login</h1>
-<p>Authentication page placeholder. The login/register flow is implemented in a later task.</p>
+<section class="renatus-auth-page">
+    <div class="renatus-auth-shell">
+        <div class="renatus-announcement">
+            @if (!string.IsNullOrWhiteSpace(_announcement?.Image))
+            {
+                <img src="@_announcement.Image" alt="" />
+            }
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">RENATUS</MudText>
+            <MudText Typo="Typo.h2">@(_announcement?.Title ?? SiteLabels.Welcome)</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@(_announcement?.Body ?? SiteLabels.SignInToContinue)</MudText>
+        </div>
+        <div class="renatus-auth-form">
+            <MudText Typo="Typo.h3">@(_registerMode ? SiteLabels.CreateAccount : SiteLabels.WelcomeBack)</MudText>
+            <MudText Typo="Typo.body2" Class="renatus-muted mb-4">@(_registerMode ? SiteLabels.JoinCommunity : SiteLabels.UseAccountToContinue)</MudText>
+
+            @if (_registerMode)
+            {
+                <EditForm Model="_registerForm" OnValidSubmit="SubmitRegister">
+                    <DataAnnotationsValidator />
+                    <MudTextField @bind-Value="_registerForm.Username" Label="@SiteLabels.Username" For="@(() => _registerForm.Username)" Required="true" />
+                    <MudTextField @bind-Value="_registerForm.Email" Label="@SiteLabels.Email" InputType="InputType.Email" For="@(() => _registerForm.Email)" Required="true" Class="mt-3" />
+                    <MudTextField @bind-Value="_registerForm.NickName" Label="@SiteLabels.Nickname" For="@(() => _registerForm.NickName)" Class="mt-3" />
+                    <MudTextField @bind-Value="_registerForm.Password" Label="@SiteLabels.Password" InputType="InputType.Password" For="@(() => _registerForm.Password)" Required="true" Class="mt-3" />
+                    <ValidationSummary />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="@_submitting" Class="mt-4">
+                        @(_submitting ? SiteLabels.CreateAccountProgress : SiteLabels.CreateAccount)
+                    </MudButton>
+                </EditForm>
+            }
+            else
+            {
+                <EditForm Model="_loginForm" OnValidSubmit="SubmitLogin">
+                    <DataAnnotationsValidator />
+                    <MudTextField @bind-Value="_loginForm.Login" Label="@SiteLabels.UsernameOrEmail" For="@(() => _loginForm.Login)" Required="true" />
+                    <MudTextField @bind-Value="_loginForm.Password" Label="@SiteLabels.Password" InputType="InputType.Password" For="@(() => _loginForm.Password)" Required="true" Class="mt-3" />
+                    <ValidationSummary />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="@_submitting" Class="mt-4">
+                        @(_submitting ? SiteLabels.SignInProgress : SiteLabels.SignIn)
+                    </MudButton>
+                </EditForm>
+            }
+
+            @if (_errorMessage is not null)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" aria-live="polite">@_errorMessage</MudAlert>
+            }
+            <MudButton Variant="Variant.Text" Color="Color.Secondary" FullWidth="true" Class="mt-3" OnClick="ToggleMode">
+                @(_registerMode ? SiteLabels.AlreadyHaveAccount : SiteLabels.NeedAccount)
+            </MudButton>
+        </div>
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "mode")]
+    private string? Mode { get; set; }
+
+    private readonly LoginForm _loginForm = new();
+    private readonly RegisterForm _registerForm = new();
+    private SiteAnnouncementDto? _announcement;
+    private string? _errorMessage;
+    private bool _registerMode;
+    private bool _submitting;
+
+    [Inject]
+    private ApiClient ApiClient { get; set; } = default!;
+
+    [Inject]
+    private FrontAuthService AuthService { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _registerMode = string.Equals(Mode, "register", StringComparison.OrdinalIgnoreCase);
+        try
+        {
+            var config = await ApiClient.GetAsync<SiteConfigDto>("/api/site/config");
+            _announcement = config.LoginAnnouncement;
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private void ToggleMode()
+    {
+        _registerMode = !_registerMode;
+        _errorMessage = null;
+    }
+
+    private async Task SubmitLogin()
+    {
+        await Submit(() => AuthService.LoginAsync(_loginForm));
+    }
+
+    private async Task SubmitRegister()
+    {
+        await Submit(() => AuthService.RegisterAsync(_registerForm));
+    }
+
+    private async Task Submit(Func<Task<AuthUserDto>> action)
+    {
+        _submitting = true;
+        _errorMessage = null;
+        try
+        {
+            await action();
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

@@ -9,15 +9,17 @@
 <MudLayout>
     <MudAppBar Elevation="1" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Open navigation" OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-2">Renatus</MudText>
+        <MudText Typo="Typo.h6" Class="ml-2">@SiteLabels.SiteName</MudText>
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-2">@_userName</MudText>
-                <MudButton Color="Color.Inherit" OnClick="@SignOut">Logout</MudButton>
+                <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-2">@Initials</MudAvatar>
+                <MudText Typo="Typo.body2" Class="mr-2">@_displayName</MudText>
+                <MudButton Color="Color.Inherit" OnClick="@SignOut">@SiteLabels.Logout</MudButton>
             </Authorized>
             <NotAuthorized>
-                <MudButton Color="Color.Inherit" Href="/login">Login</MudButton>
+                <MudButton Color="Color.Inherit" Href="/login">@SiteLabels.Login</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Href="/login?mode=register">@SiteLabels.Register</MudButton>
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
@@ -50,6 +52,7 @@
     private bool _drawerOpen;
     private bool _isDarkMode;
     private string? _userName;
+    private string? _displayName;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationState { get; set; }
@@ -80,8 +83,17 @@
         {
             var state = await AuthenticationState;
             _userName = state.User.Identity?.Name;
+            _displayName = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? _userName;
         }
     }
+
+    private string Initials => string.Join(
+        string.Empty,
+        (_displayName ?? _userName ?? "R")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Take(2)
+            .Select(part => part[0]))
+        .ToUpperInvariant();
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 

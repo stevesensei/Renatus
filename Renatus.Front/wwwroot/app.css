@@ -2,6 +2,143 @@ h1:focus {
     outline: none;
 }
 
+:root {
+    --renatus-page: #f4f6f8;
+    --renatus-surface: #ffffff;
+    --renatus-ink: #172033;
+    --renatus-muted: #667085;
+    --renatus-accent: #2563eb;
+    --renatus-accent-soft: #dbeafe;
+    --renatus-border: #e4e7ec;
+    --renatus-error: #b42318;
+}
+
+body {
+    background: var(--renatus-page);
+    color: var(--renatus-ink);
+}
+
+.renatus-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.85fr);
+    gap: 3rem;
+    align-items: center;
+    min-height: 34rem;
+    padding: 4rem 0;
+}
+
+.renatus-hero-copy {
+    max-width: 40rem;
+}
+
+.renatus-eyebrow {
+    color: var(--renatus-accent);
+    letter-spacing: 0.18em;
+}
+
+.renatus-title {
+    margin: 1rem 0;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+}
+
+.renatus-description {
+    max-width: 34rem;
+    color: var(--renatus-muted);
+    line-height: 1.7;
+}
+
+.renatus-action-stack {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 20rem;
+    margin-top: 2rem;
+}
+
+.renatus-hero-image,
+.renatus-hero-placeholder {
+    min-height: 22rem;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background: linear-gradient(145deg, var(--renatus-accent-soft), var(--renatus-surface));
+    box-shadow: 0 1.5rem 4rem rgba(23, 32, 51, 0.12);
+}
+
+.renatus-hero-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 22rem;
+    object-fit: cover;
+}
+
+.renatus-hero-placeholder {
+    display: grid;
+    place-items: center;
+    color: var(--renatus-accent);
+}
+
+.renatus-auth-page {
+    display: grid;
+    place-items: center;
+    min-height: 36rem;
+    padding: 2rem 0;
+}
+
+.renatus-auth-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(20rem, 1.1fr);
+    width: min(100%, 56rem);
+    padding: 0.5rem;
+    border-radius: 1.5rem;
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 1.5rem 4rem rgba(23, 32, 51, 0.12);
+}
+
+.renatus-announcement,
+.renatus-auth-form {
+    padding: 2rem;
+    border-radius: 1.15rem;
+    background: var(--renatus-surface);
+}
+
+.renatus-announcement {
+    background: linear-gradient(145deg, var(--renatus-accent-soft), var(--renatus-surface));
+}
+
+.renatus-announcement img {
+    width: 100%;
+    height: 10rem;
+    margin-bottom: 2rem;
+    border-radius: 0.75rem;
+    object-fit: cover;
+}
+
+.renatus-muted {
+    color: var(--renatus-muted);
+}
+
+.renatus-auth-form .mud-input-control {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .renatus-hero,
+    .renatus-auth-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .renatus-hero {
+        gap: 2rem;
+        padding: 2rem 0;
+    }
+
+    .renatus-hero-image,
+    .renatus-hero-placeholder {
+        min-height: 16rem;
+    }
+}
+
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }

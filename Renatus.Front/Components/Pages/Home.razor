@@ -1,7 +1,82 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>@(_config?.Title ?? SiteLabels.SiteName)</PageTitle>
 
-<h1>Hello, world!</h1>
+<section class="renatus-hero">
+    <div class="renatus-hero-copy">
+        <MudText Typo="Typo.overline" Class="renatus-eyebrow">@SiteLabels.CommunityEyebrow</MudText>
+        @if (_loading)
+        {
+            <MudSkeleton Animation="Animation.Wave" Height="4rem" Width="75%" />
+            <MudSkeleton Animation="Animation.Wave" Height="2rem" Width="90%" />
+        }
+        else if (_config is not null)
+        {
+            <MudText Typo="Typo.h1" Class="renatus-title">@_config.Title</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-description">@_config.Description</MudText>
+            <div class="renatus-action-stack">
+                @foreach (var button in _config.Buttons.Take(3))
+                {
+                    <MudButton Href="@button.Url" Target="@button.Target" Variant="@ButtonVariant(button.Style)" Color="@ButtonColor(button.Style)" FullWidth="true">
+                        @button.Label
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowOutward" Class="ml-2" />
+                    </MudButton>
+                }
+            </div>
+        }
+    </div>
+    <div class="renatus-hero-image">
+        @if (!string.IsNullOrWhiteSpace(_config?.HeroImage))
+        {
+            <img src="@_config.HeroImage" alt="@_config.Title" />
+        }
+        else
+        {
+            <div class="renatus-hero-placeholder"><MudIcon Icon="@Icons.Material.Filled.Public" Size="Size.Large" /></div>
+        }
+    </div>
+</section>
 
-Welcome to your new app.
+@if (_errorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">@_errorMessage</MudAlert>
+}
+
+@code {
+    private SiteConfigDto? _config;
+    private string? _errorMessage;
+    private bool _loading = true;
+
+    [Inject]
+    private ApiClient ApiClient { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _config = await ApiClient.GetAsync<SiteConfigDto>("/api/site/config");
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static Variant ButtonVariant(string? style) => style?.ToLowerInvariant() switch
+    {
+        "outlined" => Variant.Outlined,
+        "text" => Variant.Text,
+        _ => Variant.Filled,
+    };
+
+    private static Color ButtonColor(string? style) => style?.ToLowerInvariant() switch
+    {
+        "secondary" => Color.Secondary,
+        "tertiary" => Color.Tertiary,
+        _ => Color.Primary,
+    };
+}
