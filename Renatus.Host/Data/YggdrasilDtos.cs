@@ -6,11 +6,14 @@ public sealed record AgentDto(string? Name, int? Version);
 
 public sealed record ProfileDto(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("name")] string Name);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("properties")] IReadOnlyCollection<UserPropertyDto>? Properties = null
+    );
 
 public sealed record UserPropertyDto(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("value")] string Value);
+    [property: JsonPropertyName("value")] string Value,
+    [property: JsonPropertyName("signature")] string? Signature = null);
 
 public sealed record YggdrasilUserDto(
     [property: JsonPropertyName("id")] string Id,
@@ -32,7 +35,7 @@ public sealed record AuthenticateResponse(
 
 public sealed record RefreshRequest(
     [property: JsonPropertyName("accessToken")] string AccessToken,
-    [property: JsonPropertyName("clientToken")] string ClientToken,
+    [property: JsonPropertyName("clientToken")] string? ClientToken,
     [property: JsonPropertyName("selectedProfile")] ProfileDto? SelectedProfile,
     [property: JsonPropertyName("requestUser")] bool RequestUser);
 

@@ -17,11 +17,23 @@ public sealed record UploadTextureRequest(
     bool IsPublic,
 
     [property: JsonPropertyName("skinModel")]
-    SkinModel SkinModel = SkinModel.Default);
+    SkinModel SkinModel = SkinModel.Default,
+
+    [property: JsonPropertyName("name")]
+    string Name = "未命名材质",
+
+    [property: JsonPropertyName("source")]
+    TextureSource Source = TextureSource.Original,
+
+    [property: JsonPropertyName("descriptionMarkdown")]
+    string? DescriptionMarkdown = null);
 
 public sealed record TextureDto(
     [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("type")] TextureType Type,
+    [property: JsonPropertyName("source")] TextureSource Source,
+    [property: JsonPropertyName("descriptionMarkdown")] string DescriptionMarkdown,
     [property: JsonPropertyName("isPublic")] bool IsPublic,
     [property: JsonPropertyName("skinModel")] SkinModel SkinModel,
     [property: JsonPropertyName("width")] int Width,
@@ -31,3 +43,34 @@ public sealed record TextureDto(
 
 public sealed record UserTexturesResponse(
     [property: JsonPropertyName("textures")] IReadOnlyCollection<TextureDto> Textures);
+
+public sealed record PublicTextureDto(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("source")] TextureSource Source,
+    [property: JsonPropertyName("skinModel")] SkinModel SkinModel,
+    [property: JsonPropertyName("width")] int Width,
+    [property: JsonPropertyName("height")] int Height,
+    [property: JsonPropertyName("uploader")] string Uploader,
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
+
+public sealed record PublicTexturePageResponse(
+    [property: JsonPropertyName("textures")] IReadOnlyCollection<PublicTextureDto> Textures,
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("pageSize")] int PageSize,
+    [property: JsonPropertyName("totalCount")] int TotalCount,
+    [property: JsonPropertyName("totalPages")] int TotalPages);
+
+public sealed record TexturePreviewDto(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("source")] TextureSource Source,
+    [property: JsonPropertyName("type")] TextureType Type,
+    [property: JsonPropertyName("skinModel")] SkinModel SkinModel,
+    [property: JsonPropertyName("width")] int Width,
+    [property: JsonPropertyName("height")] int Height,
+    [property: JsonPropertyName("sizeBytes")] int SizeBytes,
+    [property: JsonPropertyName("dataUrl")] string DataUrl,
+    [property: JsonPropertyName("uploader")] string Uploader,
+    [property: JsonPropertyName("descriptionMarkdown")] string DescriptionMarkdown,
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);

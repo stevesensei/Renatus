@@ -4,3 +4,5 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 /.omo
+node_modules/
+npm-debug.log*

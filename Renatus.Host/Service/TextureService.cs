@@ -24,6 +24,18 @@ public sealed class TextureService(
             throw new TextureException(StatusCodes.Status400BadRequest, "Texture type is required.");
         }
 
+        var name = request.Name.Trim();
+        if (name.Length is < 1 or > 80)
+        {
+            throw new TextureException(StatusCodes.Status400BadRequest, "Texture name must be 1-80 characters.");
+        }
+
+        var descriptionMarkdown = request.DescriptionMarkdown?.Trim() ?? string.Empty;
+        if (descriptionMarkdown.Length > 4000)
+        {
+            throw new TextureException(StatusCodes.Status400BadRequest, "Texture description must be 4000 characters or fewer.");
+        }
+
         var bytes = DecodeBase64Image(request.DataBase64);
         var (width, height) = ReadPngSize(bytes);
         var textureType = request.Type.Value;
@@ -34,6 +46,9 @@ public sealed class TextureService(
             Id = Guid.NewGuid(),
             UserId = userId,
             Type = textureType,
+            Name = name,
+            Source = request.Source,
+            DescriptionMarkdown = descriptionMarkdown,
             IsPublic = request.IsPublic,
             SkinModel = textureType == TextureType.Skin ? request.SkinModel : SkinModel.Default,
             DataBase64 = Convert.ToBase64String(bytes),
@@ -207,7 +222,10 @@ public sealed class TextureService(
     {
         return new TextureDto(
             texture.Id,
+            texture.Name,
             texture.Type,
+            texture.Source,
+            texture.DescriptionMarkdown,
             texture.IsPublic,
             texture.SkinModel,
             texture.Width,

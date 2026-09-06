@@ -16,6 +16,10 @@ h1:focus { outline: none; }
     --renatus-border: #e4e7ec;
     --renatus-error: #b42318;
     --renatus-focus: #1d4ed8;
+    --renatus-status-green: #28b463;
+    --renatus-status-green-strong: #178344;
+    --renatus-skin-accent: #8d9dff;
+    --renatus-skin-glow: rgba(111, 129, 255, 0.34);
     --renatus-shadow-soft: 0 24px 64px rgba(17, 24, 39, 0.14);
     --renatus-shadow-panel: 0 14px 32px rgba(17, 24, 39, 0.08);
 }

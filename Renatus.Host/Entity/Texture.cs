@@ -6,12 +6,21 @@ public enum TextureType
     Cape = 1
 }
 
+public enum TextureSource
+{
+    Original = 0,
+    Repost = 1
+}
+
 public sealed class Texture
 {
     public Guid Id { get; set; }
     public Guid? UserId { get; set; }
     public User? User { get; set; }
     public TextureType Type { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public TextureSource Source { get; set; } = TextureSource.Original;
+    public string DescriptionMarkdown { get; set; } = string.Empty;
     public bool IsPublic { get; set; }
     public SkinModel SkinModel { get; set; }
     public string DataBase64 { get; set; } = string.Empty;

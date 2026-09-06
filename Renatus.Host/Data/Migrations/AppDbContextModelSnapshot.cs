@@ -55,7 +55,7 @@ namespace Renatus.Host.Data.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("UserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -90,11 +90,21 @@ namespace Renatus.Host.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DescriptionMarkdown")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<int>("Height")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsPublic")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("Sha256")
                         .HasMaxLength(64)
@@ -105,12 +115,17 @@ namespace Renatus.Host.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Width")
@@ -119,6 +134,8 @@ namespace Renatus.Host.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("IsPublic", "Type", "CreatedAt");
 
                     b.ToTable("Textures");
                 });

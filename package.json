@@ -1,0 +1,16 @@
+{
+  "name": "renatus-skin-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:skin3d": "esbuild Frontend/skin3d-interop.ts --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=Renatus.Host/wwwroot/js/skin3d-interop.js",
+    "check:skin3d": "tsc --noEmit"
+  },
+  "dependencies": {
+    "skin3d": "0.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "typescript": "5.8.3"
+  }
+}

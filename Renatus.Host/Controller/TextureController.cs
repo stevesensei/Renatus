@@ -10,8 +10,26 @@ namespace Renatus.Host.Controller;
 [ApiController]
 [Route("api/texture")]
 [Authorize(AuthenticationSchemes = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)]
-public sealed class TextureController(TextureService textureService) : ControllerBase
+public sealed class TextureController(TextureService textureService, TextureLibraryService textureLibraryService) : ControllerBase
 {
+    [AllowAnonymous]
+    [HttpGet("public")]
+    public async Task<GlobalResponse<PublicTexturePageResponse>> GetPublicTextures(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 12,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await textureLibraryService.GetPublicTexturesAsync(page, pageSize, cancellationToken);
+            return GlobalResponse<PublicTexturePageResponse>.Success(response);
+        }
+        catch (TextureException exception)
+        {
+            return GlobalResponse<PublicTexturePageResponse>.ResultError(message: exception.Message);
+        }
+    }
+
     [HttpPost]
     public async Task<GlobalResponse<TextureDto>> UploadTexture(
         UploadTextureRequest request,

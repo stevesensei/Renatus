@@ -46,6 +46,7 @@ builder.Services.AddScoped<YggdrasilService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();
+builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

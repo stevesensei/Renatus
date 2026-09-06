@@ -1,0 +1,234 @@
+@page "/texture/preview"
+@attribute [AllowAnonymous]
+@layout Layout.MainLayout
+@implements IAsyncDisposable
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using Renatus.Host.Data
+@using Renatus.Host.Entity
+
+<PageTitle>材质预览 · Renatus</PageTitle>
+
+<div class="skin-detail-page">
+@if (_isLoading)
+{
+    <main class="skin-state-page" aria-labelledby="skin-state-title">
+        <section class="skin-state-card">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Medium" />
+            <MudText Typo="Typo.h5" id="skin-state-title">正在加载材质预览</MudText>
+            <MudText Typo="Typo.body2" Class="renatus-muted">正在准备三维模型和材质信息。</MudText>
+        </section>
+    </main>
+}
+else if (_previewError is not null)
+{
+    <main class="skin-state-page" aria-labelledby="skin-state-title">
+        <section class="skin-state-card">
+            <MudIcon Icon="@Icons.Material.Filled.BrokenImage" Class="skin-state-icon" />
+            <MudText Typo="Typo.h5" id="skin-state-title">无法加载材质预览</MudText>
+            <MudText Typo="Typo.body2" Class="renatus-muted">@_previewError</MudText>
+            <MudButton Href="/textures" Variant="Variant.Outlined" Color="Color.Primary">返回材质库</MudButton>
+        </section>
+    </main>
+}
+else
+{
+<main aria-labelledby="skin-preview-title">
+    <header class="skin-page-heading">
+        <div class="skin-page-heading-copy">
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">材质</MudText>
+            <MudText Typo="Typo.h3" id="skin-preview-title" Class="skin-page-title">材质预览</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">查看并操作这套 Minecraft 皮肤。</MudText>
+        </div>
+    </header>
+
+    <div class="skin-detail-grid">
+        <MudPaper Elevation="2" Class="skin-preview-card" aria-labelledby="preview-panel-title">
+            <div class="skin-canvas-shell">
+                <div class="skin-auto-rotate-control">
+                    <span>自动旋转</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit" Class="@($"skin-icon-button {(_autoRotate ? "is-active" : string.Empty)}")" aria-pressed="@(_autoRotate ? "true" : "false")" aria-label="切换自动旋转" title="自动旋转" OnClick="ToggleAutoRotateAsync" />
+                </div>
+                <div class="skin-canvas-halo" aria-hidden="true"></div>
+                <canvas @ref="_canvas" aria-label="Minecraft 皮肤三维模型，可用鼠标拖动旋转"></canvas>
+                <div class="skin-canvas-tip" aria-hidden="true">
+                    <span class="skin-tip-dot"></span>
+                    拖动旋转 · 滚轮缩放
+                </div>
+            </div>
+
+            <div class="skin-animation-bar" role="group" aria-label="动作切换">
+                @foreach (var animation in _animations)
+                {
+                    <MudButton Size="Size.Medium" Variant="Variant.Outlined" Color="Color.Inherit" Class="@($"skin-animation-button {(_selectedAnimation == animation.Key ? "is-selected" : string.Empty)}")" aria-pressed="@(_selectedAnimation == animation.Key ? "true" : "false")" OnClick="@(() => SetAnimationAsync(animation.Key))">
+                        @animation.Label
+                    </MudButton>
+                }
+            </div>
+        </MudPaper>
+
+        <MudPaper Elevation="4" Class="skin-info-card" aria-labelledby="skin-info-title">
+            <div class="skin-info-heading">
+                <MudText Typo="Typo.h5" id="skin-info-title">作者信息</MudText>
+            </div>
+
+            <dl class="skin-meta-list">
+                <div><dt>名称</dt><dd>@DisplayName</dd></div>
+                <div><dt>适用模型</dt><dd>@SkinModelLabel</dd></div>
+                <div><dt>TID</dt><dd class="skin-mono">@TextureIdLabel</dd></div>
+                <div><dt>文件大小</dt><dd>@FileSizeLabel</dd></div>
+                <div><dt>上传者</dt><dd class="skin-link-value">@Uploader</dd></div>
+                <div><dt>材质来源</dt><dd><MudChip T="string" Color="Color.Success" Size="Size.Small" Class="skin-source-chip">@SourceLabel</MudChip></dd></div>
+                <div><dt>上传日期</dt><dd>@CreatedAtLabel</dd></div>
+            </dl>
+
+            @if (!string.IsNullOrWhiteSpace(_texture?.DescriptionMarkdown))
+            {
+                <section class="skin-description" aria-labelledby="skin-description-title">
+                    <MudText Typo="Typo.subtitle2" id="skin-description-title">描述</MudText>
+                    <p>@_texture.DescriptionMarkdown</p>
+                </section>
+            }
+
+        </MudPaper>
+    </div>
+</main>
+}
+</div>
+
+@code {
+    private static readonly IReadOnlyList<AnimationOption> AnimationOptions =
+    [
+        new("idle", "待机"),
+        new("walk", "行走"),
+        new("run", "奔跑"),
+        new("wave", "挥手"),
+        new("crouch", "潜行"),
+        new("hit", "攻击")
+    ];
+
+    private ElementReference _canvas;
+    private IJSObjectReference? _module;
+    private TexturePreviewDto? _texture;
+    private bool _isDemo = true;
+    private bool _isLoading = true;
+    private bool _viewerInitialized;
+    private string? _previewError;
+    private bool _autoRotate;
+    private string _selectedAnimation = "idle";
+
+    [SupplyParameterFromQuery(Name = "id")]
+    private string? TextureId { get; set; }
+
+    [Inject]
+    private TextureLibraryService TextureService { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JsRuntime { get; set; } = default!;
+
+    private IReadOnlyList<AnimationOption> _animations => AnimationOptions;
+    private string DisplayName => _isDemo ? "Blue Ice" : _texture?.Name ?? $"Skin · {TextureIdLabel}";
+    private string Uploader => _texture?.Uploader ?? "Renatus Studio";
+    private string SkinModelLabel => _texture?.SkinModel == SkinModel.Slim ? "Slim" : "默认模型";
+    private string SourceLabel => _texture?.Source == TextureSource.Repost ? "转载" : "原创";
+    private string TextureIdLabel => _texture?.Id == Guid.Empty ? "DEMO-01" : _texture?.Id.ToString("N")[..8].ToUpperInvariant() ?? "DEMO-01";
+    private string FileSizeLabel => _texture is null || _texture.SizeBytes == 0 ? "4.2 KB" : FormatFileSize(_texture.SizeBytes);
+    private string CreatedAtLabel => _texture?.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "2026-09-06 19:16";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Guid.TryParse(TextureId, out var textureId))
+        {
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var texture = await TextureService.GetPublicPreviewAsync(textureId, CancellationToken.None);
+            if (texture is null)
+            {
+                _previewError = "这份材质不存在，或已经设为私人材质。";
+            }
+            else
+            {
+                _texture = texture;
+                _isDemo = false;
+            }
+        }
+        catch
+        {
+            _previewError = "材质服务暂时不可用，请稍后再试。";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_viewerInitialized || _isLoading || _previewError is not null)
+        {
+            return;
+        }
+
+        _viewerInitialized = true;
+        _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/skin3d-interop.js");
+        await _module.InvokeVoidAsync("createViewer", _canvas, _texture?.DataUrl ?? "/skins/steve.png", _texture?.SkinModel == SkinModel.Slim ? "slim" : "default");
+        await _module.InvokeVoidAsync("setAnimation", _canvas, _selectedAnimation);
+    }
+
+    private async Task SetAnimationAsync(string animation)
+    {
+        _selectedAnimation = animation;
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("setAnimation", _canvas, animation);
+        }
+    }
+
+    private async Task ToggleAutoRotateAsync()
+    {
+        _autoRotate = !_autoRotate;
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("setAutoRotate", _canvas, _autoRotate);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("disposeViewer", _canvas);
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private static string FormatFileSize(int bytes)
+    {
+        if (bytes <= 1023)
+        {
+            return $"{bytes} B";
+        }
+
+        if (bytes <= 1048575)
+        {
+            return $"{bytes / 1024d:0.#} KB";
+        }
+
+        return $"{bytes / 1024d / 1024d:0.##} MB";
+    }
+
+    private sealed record AnimationOption(string Key, string Label);
+}
