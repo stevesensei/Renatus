@@ -17,6 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<YggdrasilOptions>(builder.Configuration.GetSection("Yggdrasil"));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
