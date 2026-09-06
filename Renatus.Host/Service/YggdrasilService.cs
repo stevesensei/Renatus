@@ -14,7 +14,7 @@ namespace Renatus.Host.Service;
 public sealed partial class YggdrasilService(
     AppDbContext dbContext,
     YggdrasilSigningKey signingKey,
-    IYggdrasilCache cache,
+    ICacheService cacheService,
     IOptions<YggdrasilOptions> options)
 {
     #region Auth
@@ -202,13 +202,13 @@ public sealed partial class YggdrasilService(
 
         var key = JoinKey(client.Player.Name, request.ServerId);
         var entry = new JoinSessionEntry(client.Player.Id, request.SelectedProfile, request.ServerId);
-        await cache.SetAsync(key, entry, TimeSpan.FromSeconds(options.Value.JoinSessionTtlSeconds), cancellationToken);
+        await cacheService.SetAsync(key, entry, TimeSpan.FromSeconds(options.Value.JoinSessionTtlSeconds), cancellationToken);
     }
 
     public async Task<SessionProfileResponse?> HasJoinedAsync(string username, string serverId, CancellationToken cancellationToken)
     {
         var key = JoinKey(username, serverId);
-        var entry = await cache.GetAsync<JoinSessionEntry>(key, cancellationToken);
+        var entry = await cacheService.GetAsync<JoinSessionEntry>(key, cancellationToken);
         if (entry is null)
         {
             return null;
@@ -224,7 +224,7 @@ public sealed partial class YggdrasilService(
             return null;
         }
 
-        await cache.RemoveAsync(key, cancellationToken);
+        await cacheService.RemoveAsync(key, cancellationToken);
         return await GetSessionProfileAsync(player.Id, false, cancellationToken);
     }
 

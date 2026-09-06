@@ -20,10 +20,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
-builder.Services.AddSingleton<IYggdrasilCache, RedisYggdrasilCache>();
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 builder.Services.AddSingleton<YggdrasilSigningKey>();
 builder.Services.AddScoped<YggdrasilService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<PlayerService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 

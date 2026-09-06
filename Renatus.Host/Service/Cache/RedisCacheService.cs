@@ -3,7 +3,7 @@ using StackExchange.Redis;
 
 namespace Renatus.Host.Service.Cache;
 
-public sealed class RedisYggdrasilCache(IConnectionMultiplexer connectionMultiplexer) : IYggdrasilCache
+public sealed class RedisCacheService(IConnectionMultiplexer connectionMultiplexer) : ICacheService
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
 

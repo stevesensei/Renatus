@@ -33,6 +33,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .HasMaxLength(32)
                 .HasDefaultValue(UserRole.Player)
                 .IsRequired();
+            entity.Property(user => user.MaxPlayerCount).HasDefaultValue(3).IsRequired();
             entity.HasIndex(user => user.NormalizedUserName).IsUnique();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });

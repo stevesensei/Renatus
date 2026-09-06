@@ -55,7 +55,8 @@ public static class DbSeed
             Email = "test@example.com",
             NormalizedEmail = YggdrasilFormat.Normalize("test@example.com"),
             PreferredLanguage = "zh_CN",
-            Role = UserRole.Player
+            Role = UserRole.Player,
+            MaxPlayerCount = 3
         };
 
         var authenticationMethod = new UserAuthenticationMethod

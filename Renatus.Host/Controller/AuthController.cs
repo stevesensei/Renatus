@@ -12,68 +12,72 @@ namespace Renatus.Host.Controller;
 public sealed class AuthController(AuthService authService) : ControllerBase
 {
     [HttpPost("session-key")]
-    public async Task<ActionResult<SessionKeyResponse>> CreateSessionKey(CancellationToken cancellationToken)
+    public async Task<GlobalResponse<SessionKeyResponse>> CreateSessionKey(CancellationToken cancellationToken)
     {
-        return Ok(await authService.CreateSessionKeyAsync(cancellationToken));
+        var response = await authService.CreateSessionKeyAsync(cancellationToken);
+        return GlobalResponse<SessionKeyResponse>.Success(response);
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
+    public async Task<GlobalResponse<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await authService.LoginAsync(request, cancellationToken));
+            var response = await authService.LoginAsync(request, cancellationToken);
+            return GlobalResponse<AuthResponse>.Success(response);
         }
         catch (AuthException exception)
         {
-            return StatusCode(exception.StatusCode, new AuthErrorResponse(exception.Message));
+            return GlobalResponse<AuthResponse>.ResultError(message: exception.Message);
         }
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
+    public async Task<GlobalResponse<AuthResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await authService.RegisterAsync(request, cancellationToken));
+            var response = await authService.RegisterAsync(request, cancellationToken);
+            return GlobalResponse<AuthResponse>.Success(response);
         }
         catch (AuthException exception)
         {
-            return StatusCode(exception.StatusCode, new AuthErrorResponse(exception.Message));
+            return GlobalResponse<AuthResponse>.ResultError(message: exception.Message);
         }
     }
 
     [Authorize]
     [HttpGet("me")]
-    public async Task<ActionResult<AuthUserDto>> Me(CancellationToken cancellationToken)
+    public async Task<GlobalResponse<AuthUserDto>> Me(CancellationToken cancellationToken)
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdValue, out var userId))
         {
-            return Unauthorized(new AuthErrorResponse("Authorization token is invalid."));
+            return GlobalResponse<AuthUserDto>.ResultError(message: "Authorization token is invalid.");
         }
 
         try
         {
-            return Ok(await authService.GetUserAsync(userId, cancellationToken));
+            var response = await authService.GetUserAsync(userId, cancellationToken);
+            return GlobalResponse<AuthUserDto>.Success(response);
         }
         catch (AuthException exception)
         {
-            return StatusCode(exception.StatusCode, new AuthErrorResponse(exception.Message));
+            return GlobalResponse<AuthUserDto>.ResultError(message: exception.Message);
         }
     }
 
     [Authorize(Roles = "Admin")]
     [HttpGet("admin/ping")]
-    public IActionResult AdminPing()
+    public Task<GlobalResponse<object>> AdminPing()
     {
-        return NoContent();
+        return Task.FromResult(GlobalResponse<object>.Success());
     }
 
     [Authorize(Roles = "Player")]
     [HttpGet("player/ping")]
-    public IActionResult PlayerPing()
+    public Task<GlobalResponse<object>> PlayerPing()
     {
-        return NoContent();
+        return Task.FromResult(GlobalResponse<object>.Success());
     }
 }
