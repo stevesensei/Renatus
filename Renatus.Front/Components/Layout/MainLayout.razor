@@ -60,9 +60,6 @@
     private Task<AuthenticationState>? AuthenticationState { get; set; }
 
     [Inject]
-    private FrontAuthService AuthService { get; set; } = default!;
-
-    [Inject]
     private NavigationManager Navigation { get; set; } = default!;
 
     private readonly MudTheme _theme = new()
@@ -99,9 +96,5 @@
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 
-    private async Task SignOut()
-    {
-        await AuthService.SignOutAsync();
-        Navigation.NavigateTo("/login", forceLoad: true);
-    }
+    private void SignOut() => Navigation.NavigateTo("/account/signout", forceLoad: true);
 }

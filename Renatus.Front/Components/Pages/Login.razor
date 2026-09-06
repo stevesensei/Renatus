@@ -60,6 +60,9 @@
     [SupplyParameterFromQuery(Name = "mode")]
     private string? Mode { get; set; }
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
     private readonly LoginForm _loginForm = new();
     private readonly RegisterForm _registerForm = new();
     private SiteAnnouncementDto? _announcement;
@@ -72,6 +75,9 @@
 
     [Inject]
     private FrontAuthService AuthService { get; set; } = default!;
+
+    [Inject]
+    private PendingAuthStore PendingAuthStore { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -106,14 +112,18 @@
         await Submit(() => AuthService.RegisterAsync(_registerForm));
     }
 
-    private async Task Submit(Func<Task<AuthUserDto>> action)
+    private async Task Submit(Func<Task<AuthResponse>> action)
     {
         _submitting = true;
         _errorMessage = null;
         try
         {
-            await action();
-            Navigation.NavigateTo("/", forceLoad: true);
+            var response = await action();
+            var key = PendingAuthStore.Stage(response);
+            var returnUrl = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
+            Navigation.NavigateTo(
+                $"/account/signin?key={key}&returnUrl={Uri.EscapeDataString(returnUrl)}",
+                forceLoad: true);
         }
         catch (ApiException exception)
         {

@@ -1,7 +1,9 @@
+using System.Globalization;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
-using System.Globalization;
 using MudBlazor.Services;
 using Renatus.Front.Components;
 using Renatus.Front.Models;
@@ -16,6 +18,9 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<LocalizationService>();
+
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<PendingAuthStore>();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -76,4 +81,57 @@ app.UseAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+app.MapGet("/account/signin", async (PendingAuthStore store, HttpContext context, string? key, string? returnUrl) =>
+{
+    var response = store.Consume(key ?? string.Empty);
+    if (response is null)
+    {
+        return Results.Redirect("/login");
+    }
+
+    var claims = new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, response.User.Id.ToString()),
+        new Claim(ClaimTypes.Name, response.User.Username),
+        new Claim(ClaimTypes.GivenName, response.User.NickName),
+        new Claim(ClaimTypes.Role, response.User.Role.ToString()),
+    };
+
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    // The backend JWT is stored only in the encrypted auth cookie, never in
+    // browser storage or page markup. It is not added to the cookie claims.
+    var properties = new AuthenticationProperties
+    {
+        IsPersistent = true,
+        ExpiresUtc = response.ExpiresAt.UtcDateTime,
+    };
+    properties.StoreTokens(
+    [
+        new AuthenticationToken { Name = "access_token", Value = response.AccessToken }
+    ]);
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        principal,
+        properties);
+
+    return Results.Redirect(IsLocalUrl(returnUrl) ? returnUrl! : "/");
+});
+
+app.MapGet("/account/signout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/login");
+});
+
 app.Run();
+
+static bool IsLocalUrl(string? url)
+{
+    return !string.IsNullOrEmpty(url)
+        && url.StartsWith('/')
+        && !url.StartsWith("//")
+        && !url.StartsWith("/\\");
+}
