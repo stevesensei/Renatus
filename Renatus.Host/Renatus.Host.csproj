@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <PackageReference Include="MudBlazor" Version="9.9.0" />
+        <PackageReference Include="Markdig" Version="0.37.0" />
         <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.30" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.30" />

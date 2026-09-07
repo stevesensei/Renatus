@@ -260,6 +260,20 @@ export async function setSkin(
 	}
 }
 
+export async function setCape(canvas: HTMLCanvasElement, capeSource: string | null): Promise<void> {
+	const state = viewers.get(canvas);
+	if (state === undefined) {
+		return;
+	}
+
+	if (capeSource === null) {
+		state.viewer.loadCape(null);
+		return;
+	}
+
+	await state.viewer.loadCape(capeSource, { backEquipment: "cape" });
+}
+
 export function setAutoRotate(canvas: HTMLCanvasElement, enabled: boolean): void {
 	const state = viewers.get(canvas);
 	if (state !== undefined) {

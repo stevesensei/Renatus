@@ -29,15 +29,26 @@
             </div>
 
             <div class="texture-upload-form">
-                <MudTextField @bind-Value="_name" Label='@L["textures.skinName"]' Required="true" Immediate="true" MaxLength="80" HelperText='@L["textures.skinNameHint"]' />
+                <fieldset class="texture-upload-field-group">
+                    <legend class="texture-upload-field-label">@L["textures.type"]</legend>
+                    <MudRadioGroup T="TextureType" @bind-Value="_textureType" @bind-Value:after="HandleTextureTypeChangedAsync" Class="texture-upload-radio-group" aria-label='@L["textures.type"]'>
+                        <MudRadio T="TextureType" Value="TextureType.Skin" Color="Color.Primary">@L["textures.skin"]</MudRadio>
+                        <MudRadio T="TextureType" Value="TextureType.Cape" Color="Color.Primary">@L["textures.cape"]</MudRadio>
+                    </MudRadioGroup>
+                </fieldset>
 
+                <MudTextField @bind-Value="_name" Label='@L["textures.textureName"]' Required="true" Immediate="true" MaxLength="80" HelperText='@L["textures.textureNameHint"]' />
+
+                @if (_textureType == TextureType.Skin)
+                {
                 <fieldset class="texture-upload-field-group">
                     <legend class="texture-upload-field-label">@L["textures.skinModel"]</legend>
-                    <MudRadioGroup T="SkinModel" @bind-Value="_skinModel" @bind-Value:after="UpdateViewerAsync" Class="texture-upload-radio-group" aria-label='@L["textures.skinModel"]'>
+                    <MudRadioGroup T="SkinModel" @bind-Value="_skinModel" @bind-Value:after="UpdatePreviewAsync" Class="texture-upload-radio-group" aria-label='@L["textures.skinModel"]'>
                         <MudRadio T="SkinModel" Value="SkinModel.Default" Color="Color.Primary">@L["textures.standard"]</MudRadio>
                         <MudRadio T="SkinModel" Value="SkinModel.Slim" Color="Color.Primary">@L["textures.slim"]</MudRadio>
                     </MudRadioGroup>
                 </fieldset>
+                }
 
                 <fieldset class="texture-upload-field-group">
                     <legend class="texture-upload-field-label">@L["textures.source"]</legend>
@@ -63,14 +74,16 @@
                                 </MudButton>
                             </div>
                         </CustomContent>
+                        <SelectedTemplate>
+                            @if (context is not null)
+                            {
+                                <div class="texture-upload-selected-file">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" aria-hidden="true" />
+                                    <span>@context.Name · @FormatBytes(context.Size)</span>
+                                </div>
+                            }
+                        </SelectedTemplate>
                     </MudFileUpload>
-                    @if (_selectedFile is not null)
-                    {
-                        <div class="texture-upload-selected-file">
-                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" aria-hidden="true" />
-                            <span>@_selectedFile.Name · @FormatBytes(_selectedFile.Size)</span>
-                        </div>
-                    }
                 </fieldset>
 
                 @if (_validationMessage is not null)
@@ -105,13 +118,20 @@
             </div>
             <div class="texture-upload-preview-meta">
                 <div>
-                    <span>@L["textures.skinName"]</span>
+                    <span>@L["textures.textureName"]</span>
                     <strong>@(string.IsNullOrWhiteSpace(_name) ? L["textures.untitled"] : _name)</strong>
                 </div>
+                <div>
+                    <span>@L["textures.type"]</span>
+                    <strong>@(_textureType == TextureType.Cape ? L["textures.cape"] : L["textures.skin"])</strong>
+                </div>
+                @if (_textureType == TextureType.Skin)
+                {
                 <div>
                     <span>@L["textures.skinModel"]</span>
                     <strong>@(_skinModel == SkinModel.Slim ? L["textures.slim"] : L["textures.standard"])</strong>
                 </div>
+                }
             </div>
         </MudPaper>
     </div>
@@ -126,11 +146,13 @@
     private byte[]? _selectedBytes;
     private string _previewDataUrl = "/skins/steve.png";
     private string _name = string.Empty;
+    private TextureType _textureType = TextureType.Skin;
     private SkinModel _skinModel = SkinModel.Default;
     private TextureSource _source = TextureSource.Original;
     private string _description = string.Empty;
     private bool _isPrivate;
     private bool _uploading;
+    private bool _viewerCreated;
     private string? _validationMessage;
     private string? _uploadSuccess;
 
@@ -140,13 +162,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender)
         {
-            return;
+            _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/skin3d-interop.js");
         }
 
-        _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/skin3d-interop.js");
-        await _module.InvokeVoidAsync("createViewer", _canvas, _previewDataUrl, "default");
+        await EnsurePreviewAsync();
     }
 
     private async Task HandleFileSelected(InputFileChangeEventArgs args)
@@ -164,20 +185,27 @@
         {
             _selectedBytes = await ReadFileAsync(_selectedFile);
             var dimensions = ReadPngDimensions(_selectedBytes);
-            if (!IsAllowedSkinSize(dimensions.Width, dimensions.Height))
+            if (!IsAllowedTextureSize(dimensions.Width, dimensions.Height))
             {
-                _validationMessage = L["textures.invalidSkinSize"];
+                _validationMessage = _textureType == TextureType.Cape
+                    ? L["textures.invalidCapeSize"]
+                    : L["textures.invalidSkinSize"];
+                _selectedFile = null;
                 _selectedBytes = null;
+                _previewDataUrl = "/skins/steve.png";
                 return;
             }
 
             _previewDataUrl = $"data:image/png;base64,{Convert.ToBase64String(_selectedBytes)}";
-            await UpdateViewerAsync();
+            await UpdatePreviewAsync();
         }
         catch (InvalidDataException)
         {
+            _selectedFile = null;
             _selectedBytes = null;
+            _previewDataUrl = "/skins/steve.png";
             _validationMessage = L["textures.invalidPng"];
+            await UpdatePreviewAsync();
         }
     }
 
@@ -193,7 +221,7 @@
         try
         {
             var request = new UploadTextureRequest(
-                TextureType.Skin,
+                _textureType,
                 $"data:image/png;base64,{Convert.ToBase64String(_selectedBytes)}",
                 !_isPrivate,
                 _skinModel,
@@ -204,6 +232,8 @@
             _uploadSuccess = L["textures.publishSuccess"];
             _selectedFile = null;
             _selectedBytes = null;
+            _previewDataUrl = "/skins/steve.png";
+            await UpdatePreviewAsync();
         }
         catch (TextureException exception)
         {
@@ -215,11 +245,57 @@
         }
     }
 
-    private async Task UpdateViewerAsync()
+    private async Task UpdatePreviewAsync()
     {
-        if (_module is not null)
+        if (_module is null)
+        {
+            return;
+        }
+
+        await EnsurePreviewAsync();
+        if (_textureType == TextureType.Skin)
         {
             await _module.InvokeVoidAsync("setSkin", _canvas, _previewDataUrl, _skinModel == SkinModel.Slim ? "slim" : "default");
+            await _module.InvokeVoidAsync("setCape", _canvas, null);
+            return;
+        }
+
+        await _module.InvokeVoidAsync("setSkin", _canvas, "/skins/steve.png", "default");
+        await _module.InvokeVoidAsync("setCape", _canvas, _selectedFile is null ? null : _previewDataUrl);
+    }
+
+    private async Task HandleTextureTypeChangedAsync()
+    {
+        _validationMessage = null;
+        _uploadSuccess = null;
+        if (_selectedBytes is not null)
+        {
+            var dimensions = ReadPngDimensions(_selectedBytes);
+            if (!IsAllowedTextureSize(dimensions.Width, dimensions.Height))
+            {
+                _selectedFile = null;
+                _selectedBytes = null;
+                _previewDataUrl = "/skins/steve.png";
+                _validationMessage = _textureType == TextureType.Cape
+                    ? L["textures.invalidCapeSize"]
+                    : L["textures.invalidSkinSize"];
+            }
+        }
+
+        await UpdatePreviewAsync();
+    }
+
+    private async Task EnsurePreviewAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        if (!_viewerCreated)
+        {
+            await _module.InvokeVoidAsync("createViewer", _canvas, "/skins/steve.png", "default");
+            _viewerCreated = true;
         }
     }
 
@@ -248,8 +324,14 @@
         return width > 0 && height > 0 ? (width, height) : throw new InvalidDataException();
     }
 
-    private static bool IsAllowedSkinSize(int width, int height)
+    private bool IsAllowedTextureSize(int width, int height)
     {
+        if (_textureType == TextureType.Cape)
+        {
+            var capeWidthMultiple = width / 64;
+            return capeWidthMultiple > 0 && width % 64 == 0 && height == 32 * capeWidthMultiple;
+        }
+
         var widthMultiple = width / 64;
         return widthMultiple > 0 && width % 64 == 0 && (height == 32 * widthMultiple || height == 64 * widthMultiple);
     }
@@ -265,7 +347,10 @@
 
         try
         {
-            await _module.InvokeVoidAsync("disposeViewer", _canvas);
+            if (_viewerCreated)
+            {
+                await _module.InvokeVoidAsync("disposeViewer", _canvas);
+            }
             await _module.DisposeAsync();
         }
         catch (JSDisconnectedException)

@@ -5,6 +5,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
+@using Markdig
 @using Renatus.Host.Data
 @using Renatus.Host.Entity
 
@@ -99,7 +100,7 @@ else
             {
                 <section class="skin-description" aria-labelledby="skin-description-title">
                     <MudText Typo="Typo.subtitle2" id="skin-description-title">描述</MudText>
-                    <p>@_texture.DescriptionMarkdown</p>
+                    <div class="skin-description-content">@((MarkupString)RenderDescription(_texture.DescriptionMarkdown))</div>
                 </section>
             }
 
@@ -119,6 +120,11 @@ else
         new("crouch", "潜行"),
         new("hit", "攻击")
     ];
+
+    private static readonly MarkdownPipeline DescriptionPipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()
+        .UseAdvancedExtensions()
+        .Build();
 
     private ElementReference _canvas;
     private IJSObjectReference? _module;
@@ -151,12 +157,14 @@ else
 
     private IReadOnlyList<AnimationOption> _animations => AnimationOptions;
     private string DisplayName => _isDemo ? "Blue Ice" : _texture?.Name ?? $"Skin · {TextureIdLabel}";
-    private string Uploader => _texture?.Uploader ?? "Renatus Studio";
+    private string Uploader => _texture?.Uploader ?? "Renatus";
     private string SkinModelLabel => _texture?.SkinModel == SkinModel.Slim ? "Slim" : "默认模型";
     private string SourceLabel => _texture?.Source == TextureSource.Repost ? "转载" : "原创";
     private string TextureIdLabel => _texture?.Id == Guid.Empty ? "DEMO-01" : _texture?.Id.ToString("N")[..8].ToUpperInvariant() ?? "DEMO-01";
     private string FileSizeLabel => _texture is null || _texture.SizeBytes == 0 ? "4.2 KB" : FormatFileSize(_texture.SizeBytes);
     private string CreatedAtLabel => _texture?.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "2026-09-06 19:16";
+
+    private static string RenderDescription(string markdown) => Markdown.ToHtml(markdown, DescriptionPipeline);
 
     protected override async Task OnInitializedAsync()
     {

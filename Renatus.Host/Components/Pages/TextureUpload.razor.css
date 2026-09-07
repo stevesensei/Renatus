@@ -113,6 +113,8 @@
 
 .texture-upload-selected-file {
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
@@ -121,6 +123,13 @@
     color: var(--renatus-status-green-strong, var(--renatus-accent-strong));
     font-size: 13px;
     font-weight: 700;
+}
+
+.texture-upload-selected-file span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .texture-upload-preview-status {

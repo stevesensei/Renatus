@@ -40,7 +40,9 @@ public sealed class TextureLibraryService(IDbContextFactory<AppDbContext> dbCont
                 texture.SkinModel,
                 texture.Width,
                 texture.Height,
-                texture.User == null ? "Renatus" : texture.User.NickName,
+                texture.User == null
+                    ? "Renatus"
+                    : string.IsNullOrWhiteSpace(texture.User.NickName) ? texture.User.UserName : texture.User.NickName,
                 texture.CreatedAt,
                 favoriteIds.Contains(texture.Id)))
             .ToArrayAsync(cancellationToken);
