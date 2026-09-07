@@ -18,7 +18,20 @@ type ViewerState = {
 	readonly resizeObserver: ResizeObserver;
 };
 
+const libraryPreviewModels = ["default", "slim"] as const;
+type LibraryPreviewModel = (typeof libraryPreviewModels)[number];
+
+const libraryPreviewWidth = 600;
+const libraryPreviewHeight = 400;
+const libraryPreviewPaneWidth = libraryPreviewWidth / 2;
+const libraryPreviewVerticalOffset = -8;
+const libraryPreviewCameraPose = {
+	rotation: { x: -0.62, y: 0.534, z: 0.348 },
+	position: { x: 30.5, y: 22, z: 42 },
+} as const;
+
 const viewers = new Map<HTMLCanvasElement, ViewerState>();
+let libraryPreviewRun: Promise<void> | null = null;
 
 function assertNever(value: never): never {
 	throw new Error(`Unsupported skin animation: ${String(value)}`);
@@ -53,6 +66,122 @@ function parseAnimationName(value: string): AnimationName {
 	}
 
 	throw new Error(`Unsupported skin animation: ${value}`);
+}
+
+function parseLibraryPreviewModel(value: string | undefined): LibraryPreviewModel {
+	if (value === libraryPreviewModels[1]) {
+		return libraryPreviewModels[1];
+	}
+
+	return libraryPreviewModels[0];
+}
+
+function createLibraryPreviewViewer(): Render {
+	const canvas = document.createElement("canvas");
+	return new Render({
+		canvas,
+		width: libraryPreviewPaneWidth,
+		height: libraryPreviewHeight,
+		pixelRatio: 1,
+		maxPixelRatio: 1,
+		preserveDrawingBuffer: true,
+		renderPaused: true,
+		fov: 42,
+		zoom: 0.86,
+		enableControls: false,
+		allowRotateX: false,
+		allowRotateY: false,
+		allowZoom: false,
+		materialType: "standard",
+	});
+}
+
+async function renderLibraryPreview(
+	viewer: Render,
+	image: HTMLImageElement,
+	compositeContext: CanvasRenderingContext2D,
+	model: LibraryPreviewModel,
+	skinSource: string,
+): Promise<void> {
+	await viewer.loadSkin(skinSource, { model });
+	viewer.camera.rotation.set(
+		libraryPreviewCameraPose.rotation.x,
+		libraryPreviewCameraPose.rotation.y,
+		libraryPreviewCameraPose.rotation.z,
+	);
+	viewer.camera.position.set(
+		libraryPreviewCameraPose.position.x,
+		libraryPreviewCameraPose.position.y,
+		libraryPreviewCameraPose.position.z,
+	);
+	viewer.playerWrapper.position.set(0, libraryPreviewVerticalOffset, 0);
+	viewer.playerWrapper.rotation.set(0, 0, 0);
+	viewer.render();
+	compositeContext.drawImage(viewer.canvas, 0, 0, libraryPreviewPaneWidth, libraryPreviewHeight);
+
+	viewer.playerWrapper.rotation.y = Math.PI;
+	viewer.render();
+	compositeContext.drawImage(
+		viewer.canvas,
+		libraryPreviewPaneWidth,
+		0,
+		libraryPreviewPaneWidth,
+		libraryPreviewHeight,
+	);
+
+	image.src = compositeContext.canvas.toDataURL("image/png");
+	image.dataset.previewReady = "true";
+}
+
+async function renderLibraryPreviewsInternal(root: HTMLElement): Promise<void> {
+	const images = Array.from(root.querySelectorAll<HTMLImageElement>("[data-skin-preview]"));
+	const pendingImages = images.filter(
+		(image) => image.dataset.previewReady !== "true" && image.dataset.previewFailed !== "true",
+	);
+	if (pendingImages.length === 0) {
+		return;
+	}
+
+	const compositeCanvas = document.createElement("canvas");
+	compositeCanvas.width = libraryPreviewWidth;
+	compositeCanvas.height = libraryPreviewHeight;
+	const compositeContext = compositeCanvas.getContext("2d");
+	if (compositeContext === null) {
+		throw new Error("Unable to create the library preview canvas context.");
+	}
+
+	const viewer = createLibraryPreviewViewer();
+	try {
+		for (const image of pendingImages) {
+			image.dataset.previewLoading = "true";
+			try {
+				compositeContext.clearRect(0, 0, libraryPreviewWidth, libraryPreviewHeight);
+				const skinSource = image.dataset.skinSource;
+				if (skinSource === undefined || skinSource.length === 0) {
+					throw new Error("Missing skin source for library preview.");
+				}
+
+				await renderLibraryPreview(
+					viewer,
+					image,
+					compositeContext,
+					parseLibraryPreviewModel(image.dataset.skinModel),
+					skinSource,
+				);
+			} catch (error) {
+				image.dataset.previewFailed = "true";
+				if (error instanceof Error) {
+					console.warn("Unable to render texture library preview.", error);
+				} else {
+					console.warn("Unable to render texture library preview.", String(error));
+				}
+			} finally {
+				delete image.dataset.previewLoading;
+			}
+		}
+	} finally {
+		viewer.dispose();
+	}
 }
 
 function resizeViewer(canvas: HTMLCanvasElement, viewer: Render): void {
@@ -147,4 +276,20 @@ export function disposeViewer(canvas: HTMLCanvasElement): void {
 	state.resizeObserver.disconnect();
 	state.viewer.dispose();
 	viewers.delete(canvas);
+}
+
+export async function renderLibraryPreviews(root: HTMLElement): Promise<void> {
+	if (libraryPreviewRun !== null) {
+		await libraryPreviewRun;
+	}
+
+	const run = renderLibraryPreviewsInternal(root);
+	libraryPreviewRun = run;
+	try {
+		await run;
+	} finally {
+		if (libraryPreviewRun === run) {
+			libraryPreviewRun = null;
+		}
+	}
 }

@@ -122,7 +122,6 @@
     width: 100%;
     height: 220px;
     object-fit: contain;
-    image-rendering: pixelated;
     transform: scale(1.08);
     transition: transform 220ms ease;
 }
