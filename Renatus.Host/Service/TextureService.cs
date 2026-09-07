@@ -60,6 +60,11 @@ public sealed class TextureService(
 
         dbContext.Textures.Add(texture);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (texture.IsPublic)
+        {
+            await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
+        }
+
         return ToDto(texture);
     }
 
@@ -96,6 +101,12 @@ public sealed class TextureService(
         {
             await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(affectedUserId), cancellationToken);
         }
+
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteIdsCacheKey(userId), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteTexturesCacheKey(userId), cancellationToken);
 
         return ToDto(texture);
     }

@@ -12,6 +12,7 @@ public sealed partial class PlayerService(
     ICacheService cacheService)
 {
     private static readonly TimeSpan UserPlayersCacheTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PlayerCacheTtl = TimeSpan.FromMinutes(5);
 
     public async Task<PlayerDto> CreatePlayerAsync(
         Guid userId,
@@ -73,6 +74,13 @@ public sealed partial class PlayerService(
 
     public async Task<PlayerDto> GetPlayerAsync(Guid userId, Guid playerId, CancellationToken cancellationToken)
     {
+        var cacheKey = PlayerCacheKey(userId, playerId);
+        var cached = await cacheService.GetAsync<PlayerDto>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var player = await dbContext.Players
             .AsNoTracking()
@@ -84,11 +92,20 @@ public sealed partial class PlayerService(
             throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
         }
 
-        return ToDto(player);
+        var response = ToDto(player);
+        await cacheService.SetAsync(cacheKey, response, PlayerCacheTtl, cancellationToken);
+        return response;
     }
 
     public async Task<UserPlayersResponse> GetUserPlayersAsync(Guid userId, CancellationToken cancellationToken)
     {
+        var cacheKey = UserPlayersCacheKey(userId);
+        var cached = await cacheService.GetAsync<UserPlayersResponse>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var user = await dbContext.Users
             .AsNoTracking()
@@ -104,13 +121,6 @@ public sealed partial class PlayerService(
             throw new PlayerException(StatusCodes.Status401Unauthorized, "User is unavailable.");
         }
 
-        var cacheKey = UserPlayersCacheKey(userId);
-        var cached = await cacheService.GetAsync<PlayerDto[]>(cacheKey, cancellationToken);
-        if (cached is not null)
-        {
-            return new UserPlayersResponse(cached, user.MaxPlayerCount);
-        }
-
         var players = await dbContext.Players
             .AsNoTracking()
             .Where(player => player.UserId == userId)
@@ -118,8 +128,9 @@ public sealed partial class PlayerService(
             .Select(player => ToDto(player))
             .ToArrayAsync(cancellationToken);
 
-        await cacheService.SetAsync(cacheKey, players, UserPlayersCacheTtl, cancellationToken);
-        return new UserPlayersResponse(players, user.MaxPlayerCount);
+        var response = new UserPlayersResponse(players, user.MaxPlayerCount);
+        await cacheService.SetAsync(cacheKey, response, UserPlayersCacheTtl, cancellationToken);
+        return response;
     }
 
     public async Task<PlayerDto> UpdatePlayerTexturesAsync(
@@ -149,7 +160,7 @@ public sealed partial class PlayerService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        await RemoveUserPlayersCacheAsync(userId, cancellationToken);
+        await RemovePlayerCachesAsync(userId, playerId, cancellationToken);
         return ToDto(player);
     }
 
@@ -167,7 +178,7 @@ public sealed partial class PlayerService(
 
         dbContext.Players.Remove(player);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await RemoveUserPlayersCacheAsync(userId, cancellationToken);
+        await RemovePlayerCachesAsync(userId, playerId, cancellationToken);
         return new DeletePlayerResponse(playerId);
     }
 
@@ -201,6 +212,12 @@ public sealed partial class PlayerService(
         return cacheService.RemoveAsync(UserPlayersCacheKey(userId), cancellationToken);
     }
 
+    private async Task RemovePlayerCachesAsync(Guid userId, Guid playerId, CancellationToken cancellationToken)
+    {
+        await RemoveUserPlayersCacheAsync(userId, cancellationToken);
+        await cacheService.RemoveAsync(PlayerCacheKey(userId, playerId), cancellationToken);
+    }
+
     private static PlayerDto ToDto(Player player)
     {
         return new PlayerDto(
@@ -215,7 +232,12 @@ public sealed partial class PlayerService(
 
     public static string UserPlayersCacheKey(Guid userId)
     {
-        return $"player:user:{userId:N}:players";
+        return $"player:user:{userId:N}:players:v2";
+    }
+
+    public static string PlayerCacheKey(Guid userId, Guid playerId)
+    {
+        return $"player:user:{userId:N}:player:{playerId:N}:v1";
     }
 
     private static void ValidatePlayerName(string playerName)
