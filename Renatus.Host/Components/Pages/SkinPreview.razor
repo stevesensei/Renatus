@@ -88,6 +88,7 @@ else
 
             <dl class="skin-meta-list">
                 <div><dt>名称</dt><dd>@DisplayName</dd></div>
+                <div><dt>材质类型</dt><dd>@TextureTypeLabel</dd></div>
                 <div><dt>适用模型</dt><dd>@SkinModelLabel</dd></div>
                 <div><dt>TID</dt><dd class="skin-mono">@TextureIdLabel</dd></div>
                 <div><dt>文件大小</dt><dd>@FileSizeLabel</dd></div>
@@ -158,6 +159,7 @@ else
     private IReadOnlyList<AnimationOption> _animations => AnimationOptions;
     private string DisplayName => _isDemo ? "Blue Ice" : _texture?.Name ?? $"Skin · {TextureIdLabel}";
     private string Uploader => _texture?.Uploader ?? "Renatus";
+    private string TextureTypeLabel => _texture?.Type == TextureType.Cape ? "披风" : "皮肤";
     private string SkinModelLabel => _texture?.SkinModel == SkinModel.Slim ? "Slim" : "默认模型";
     private string SourceLabel => _texture?.Source == TextureSource.Repost ? "转载" : "原创";
     private string TextureIdLabel => _texture?.Id == Guid.Empty ? "DEMO-01" : _texture?.Id.ToString("N")[..8].ToUpperInvariant() ?? "DEMO-01";
@@ -267,7 +269,13 @@ else
 
         _viewerInitialized = true;
         _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/skin3d-interop.js");
-        await _module.InvokeVoidAsync("createViewer", _canvas, _texture?.DataUrl ?? "/skins/steve.png", _texture?.SkinModel == SkinModel.Slim ? "slim" : "default");
+        var isCape = _texture?.Type == TextureType.Cape;
+        await _module.InvokeVoidAsync(
+            "createViewer",
+            _canvas,
+            isCape ? "/skins/steve.png" : _texture?.DataUrl ?? "/skins/steve.png",
+            isCape ? "default" : _texture?.SkinModel == SkinModel.Slim ? "slim" : "default");
+        await _module.InvokeVoidAsync("setCape", _canvas, isCape ? _texture?.DataUrl : null);
         await _module.InvokeVoidAsync("setAnimation", _canvas, _selectedAnimation);
     }
 

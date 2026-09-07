@@ -77,8 +77,9 @@
                              loading="lazy"
                              width="300"
 
-                             data-skin-preview="true"
-                             data-skin-source="@PreviewUrl(texture.Id)"
+                             data-texture-preview="true"
+                             data-texture-type="@TextureTypeKey(texture.Type)"
+                             data-texture-source="@PreviewUrl(texture.Id)"
                              data-skin-model="@(texture.SkinModel == SkinModel.Slim ? "slim" : "default")" />
                         <span class="texture-library-card-badge">@SourceLabel(texture.Source)</span>
                         <button type="button"
@@ -97,7 +98,7 @@
                             <MudText Typo="Typo.h6">@texture.Name</MudText>
                             <MudIcon Icon="@Icons.Material.Filled.ArrowOutward" Size="Size.Small" aria-hidden="true" />
                         </div>
-                        <MudText Typo="Typo.body2" Class="renatus-muted">@ModelLabel(texture.SkinModel) · @texture.Width × @texture.Height</MudText>
+                        <MudText Typo="Typo.body2" Class="renatus-muted">@TextureMetaLabel(texture)</MudText>
                         <div class="texture-library-card-footer">
                             <span>@texture.Uploader</span>
                             <time datetime="@texture.CreatedAt.ToString("O")">@texture.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</time>
@@ -240,6 +241,10 @@
 
     private string PreviewUrl(Guid id) => $"{YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";
     private static string PreviewLink(Guid id) => $"/texture/preview?id={id:N}";
+    private string TextureMetaLabel(PublicTextureDto texture) => texture.Type == TextureType.Cape
+        ? $"{L["textures.cape"]} · {texture.Width} × {texture.Height}"
+        : $"{L["textures.skin"]} · {ModelLabel(texture.SkinModel)} · {texture.Width} × {texture.Height}";
+    private static string TextureTypeKey(TextureType type) => type == TextureType.Cape ? "cape" : "skin";
     private string ModelLabel(SkinModel model) => model == SkinModel.Slim ? L["textures.slim"] : L["textures.standard"];
     private string SourceLabel(TextureSource source) => source == TextureSource.Repost ? L["textures.repost"] : L["textures.original"];
 

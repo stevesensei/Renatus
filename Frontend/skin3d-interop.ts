@@ -20,6 +20,8 @@ type ViewerState = {
 
 const libraryPreviewModels = ["default", "slim"] as const;
 type LibraryPreviewModel = (typeof libraryPreviewModels)[number];
+const libraryPreviewTextureTypes = ["skin", "cape"] as const;
+type LibraryPreviewTextureType = (typeof libraryPreviewTextureTypes)[number];
 
 const libraryPreviewWidth = 600;
 const libraryPreviewHeight = 400;
@@ -76,6 +78,10 @@ function parseLibraryPreviewModel(value: string | undefined): LibraryPreviewMode
 	return libraryPreviewModels[0];
 }
 
+function parseLibraryPreviewTextureType(value: string | undefined): LibraryPreviewTextureType {
+	return value === libraryPreviewTextureTypes[1] ? libraryPreviewTextureTypes[1] : libraryPreviewTextureTypes[0];
+}
+
 function createLibraryPreviewViewer(): Render {
 	const canvas = document.createElement("canvas");
 	return new Render({
@@ -100,10 +106,18 @@ async function renderLibraryPreview(
 	viewer: Render,
 	image: HTMLImageElement,
 	compositeContext: CanvasRenderingContext2D,
+	textureType: LibraryPreviewTextureType,
 	model: LibraryPreviewModel,
-	skinSource: string,
+	textureSource: string,
 ): Promise<void> {
-	await viewer.loadSkin(skinSource, { model });
+	await viewer.loadSkin(textureType === "cape" ? "/skins/steve.png" : textureSource, {
+		model: textureType === "cape" ? "default" : model,
+	});
+	if (textureType === "cape") {
+		await viewer.loadCape(textureSource, { backEquipment: "cape" });
+	} else {
+		viewer.loadCape(null);
+	}
 	viewer.camera.rotation.set(
 		libraryPreviewCameraPose.rotation.x,
 		libraryPreviewCameraPose.rotation.y,
@@ -134,7 +148,7 @@ async function renderLibraryPreview(
 }
 
 async function renderLibraryPreviewsInternal(root: HTMLElement): Promise<void> {
-	const images = Array.from(root.querySelectorAll<HTMLImageElement>("[data-skin-preview]"));
+	const images = Array.from(root.querySelectorAll<HTMLImageElement>("[data-texture-preview]"));
 	const pendingImages = images.filter(
 		(image) => image.dataset.previewReady !== "true" && image.dataset.previewFailed !== "true",
 	);
@@ -156,17 +170,18 @@ async function renderLibraryPreviewsInternal(root: HTMLElement): Promise<void> {
 			image.dataset.previewLoading = "true";
 			try {
 				compositeContext.clearRect(0, 0, libraryPreviewWidth, libraryPreviewHeight);
-				const skinSource = image.dataset.skinSource;
-				if (skinSource === undefined || skinSource.length === 0) {
-					throw new Error("Missing skin source for library preview.");
+				const textureSource = image.dataset.textureSource;
+				if (textureSource === undefined || textureSource.length === 0) {
+					throw new Error("Missing texture source for library preview.");
 				}
 
 				await renderLibraryPreview(
 					viewer,
 					image,
 					compositeContext,
+					parseLibraryPreviewTextureType(image.dataset.textureType),
 					parseLibraryPreviewModel(image.dataset.skinModel),
-					skinSource,
+					textureSource,
 				);
 			} catch (error) {
 				image.dataset.previewFailed = "true";

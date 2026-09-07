@@ -47,6 +47,7 @@ public sealed record UserTexturesResponse(
 public sealed record PublicTextureDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("type")] TextureType Type,
     [property: JsonPropertyName("source")] TextureSource Source,
     [property: JsonPropertyName("skinModel")] SkinModel SkinModel,
     [property: JsonPropertyName("width")] int Width,

@@ -20,7 +20,7 @@ public sealed class TextureLibraryService(IDbContextFactory<AppDbContext> dbCont
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var query = dbContext.Textures
             .AsNoTracking()
-            .Where(texture => texture.Type == TextureType.Skin && texture.IsPublic)
+            .Where(texture => texture.IsPublic)
             .OrderByDescending(texture => texture.CreatedAt);
         var totalCount = await query.CountAsync(cancellationToken);
         var totalPages = totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
@@ -36,6 +36,7 @@ public sealed class TextureLibraryService(IDbContextFactory<AppDbContext> dbCont
             .Select(texture => new PublicTextureDto(
                 texture.Id,
                 texture.Name,
+                texture.Type,
                 texture.Source,
                 texture.SkinModel,
                 texture.Width,
@@ -60,7 +61,7 @@ public sealed class TextureLibraryService(IDbContextFactory<AppDbContext> dbCont
             .AsNoTracking()
             .Include(entity => entity.User)
             .FirstOrDefaultAsync(
-                entity => entity.Id == textureId && entity.Type == TextureType.Skin && entity.IsPublic,
+                entity => entity.Id == textureId && entity.IsPublic,
                 cancellationToken);
         if (texture is null)
         {
@@ -105,7 +106,7 @@ public sealed class TextureLibraryService(IDbContextFactory<AppDbContext> dbCont
         var texture = await dbContext.Textures
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                entity => entity.Id == textureId && entity.Type == TextureType.Skin && entity.IsPublic,
+                entity => entity.Id == textureId && entity.IsPublic,
                 cancellationToken);
         if (texture is null)
         {
