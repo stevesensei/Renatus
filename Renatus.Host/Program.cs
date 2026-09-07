@@ -26,7 +26,6 @@ builder.WebHost.UseStaticWebAssets();
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("zh-CN");
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
 
-builder.Services.Configure<YggdrasilOptions>(builder.Configuration.GetSection("Yggdrasil"));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 builder.Services.AddRazorComponents()
@@ -41,6 +40,7 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+builder.Services.AddSingleton<AppConfigurationService>();
 builder.Services.AddSingleton<YggdrasilSigningKey>();
 builder.Services.AddScoped<YggdrasilService>();
 builder.Services.AddScoped<AuthService>();
@@ -119,8 +119,12 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await DbSeed.InitializeAsync(dbContext);
+    await DbSeed.InitializeAsync(dbContext, builder.Configuration);
 }
+
+var appConfigurationService = app.Services.GetRequiredService<AppConfigurationService>();
+var yggdrasilOptions = await appConfigurationService.GetYggdrasilOptionsAsync(CancellationToken.None);
+app.Services.GetRequiredService<YggdrasilSigningKey>().Initialize(yggdrasilOptions.SigningPrivateKeyPem);
 
 app.Use(async (context, next) =>
 {

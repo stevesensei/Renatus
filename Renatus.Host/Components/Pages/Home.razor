@@ -70,11 +70,11 @@
     [Inject]
     private SiteService SiteService { get; set; } = default!;
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         try
         {
-            _config = SiteService.GetConfig();
+            _config = await SiteService.GetConfigAsync(CancellationToken.None);
         }
         catch (InvalidOperationException exception)
         {
@@ -85,7 +85,6 @@
             _loading = false;
         }
 
-        return Task.CompletedTask;
     }
 
     private static Variant ButtonVariant(string? style) => style?.ToLowerInvariant() switch

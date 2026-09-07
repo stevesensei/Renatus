@@ -9,5 +9,6 @@ namespace Renatus.Host.Controller;
 public sealed class SiteController(SiteService siteService) : ControllerBase
 {
     [HttpGet("config")]
-    public GlobalResponse<SiteConfigDto> GetConfig() => GlobalResponse<SiteConfigDto>.Success(siteService.GetConfig());
+    public async Task<GlobalResponse<SiteConfigDto>> GetConfig(CancellationToken cancellationToken)
+        => GlobalResponse<SiteConfigDto>.Success(await siteService.GetConfigAsync(cancellationToken));
 }

@@ -1,21 +1,22 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Options;
-using Renatus.Host.Data.Config;
 
 namespace Renatus.Host.Service;
 
 public sealed class YggdrasilSigningKey : IDisposable
 {
-    private readonly RSA _rsa;
+    private RSA _rsa = RSA.Create(2048);
 
-    public YggdrasilSigningKey(IOptions<YggdrasilOptions> options)
+    public void Initialize(string? signingPrivateKeyPem)
     {
-        _rsa = RSA.Create(2048);
-        if (!string.IsNullOrWhiteSpace(options.Value.SigningPrivateKeyPem))
+        var rsa = RSA.Create(2048);
+        if (!string.IsNullOrWhiteSpace(signingPrivateKeyPem))
         {
-            _rsa.ImportFromPem(options.Value.SigningPrivateKeyPem);
+            rsa.ImportFromPem(signingPrivateKeyPem);
         }
+
+        var previous = Interlocked.Exchange(ref _rsa, rsa);
+        previous.Dispose();
     }
 
     public string PublicKeyPem => ExportPublicKeyPem();

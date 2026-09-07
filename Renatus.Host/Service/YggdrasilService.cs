@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
@@ -15,12 +14,13 @@ public sealed partial class YggdrasilService(
     AppDbContext dbContext,
     YggdrasilSigningKey signingKey,
     ICacheService cacheService,
-    IOptions<YggdrasilOptions> options)
+    AppConfigurationService configurationService)
 {
     #region Auth
 
     public async Task<AuthenticateResponse> AuthenticateAsync(AuthenticateRequest request, CancellationToken cancellationToken)
     {
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
         var clientToken = string.IsNullOrWhiteSpace(request.ClientToken)
             ? Guid.NewGuid().ToString("N")
@@ -55,7 +55,7 @@ public sealed partial class YggdrasilService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var accessToken = CreateAccessToken(client);
+        var accessToken = CreateAccessToken(client, options);
         var selectedProfile = selectedPlayer is null ? null : ToProfile(selectedPlayer);
         return new AuthenticateResponse(
             accessToken,
@@ -67,6 +67,7 @@ public sealed partial class YggdrasilService(
 
     public async Task<RefreshResponse> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken)
     {
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var client = await ValidateAccessTokenAsync(request.AccessToken, request.ClientToken, false, cancellationToken);
         Player? selectedPlayer = client.Player;
 
@@ -94,7 +95,7 @@ public sealed partial class YggdrasilService(
         client.LastUsedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var accessToken = CreateAccessToken(client);
+        var accessToken = CreateAccessToken(client, options);
         return new RefreshResponse(
             accessToken,
             client.ClientToken,
@@ -192,6 +193,7 @@ public sealed partial class YggdrasilService(
 
     public async Task JoinAsync(JoinRequest request, CancellationToken cancellationToken)
     {
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var client = await ValidateAccessTokenAsync(request.AccessToken, null, true, cancellationToken);
         var selectedProfileId = YggdrasilFormat.ParseUnsignedUuid(request.SelectedProfile);
 
@@ -202,7 +204,7 @@ public sealed partial class YggdrasilService(
 
         var key = JoinKey(client.Player.Name, request.ServerId);
         var entry = new JoinSessionEntry(client.Player.Id, request.SelectedProfile, request.ServerId);
-        await cacheService.SetAsync(key, entry, TimeSpan.FromSeconds(options.Value.JoinSessionTtlSeconds), cancellationToken);
+        await cacheService.SetAsync(key, entry, TimeSpan.FromSeconds(options.JoinSessionTtlSeconds), cancellationToken);
     }
 
     public async Task<SessionProfileResponse?> HasJoinedAsync(string username, string serverId, CancellationToken cancellationToken)
@@ -265,12 +267,13 @@ public sealed partial class YggdrasilService(
         IReadOnlyCollection<string> playerNames,
         CancellationToken cancellationToken)
     {
-        if (playerNames.Count == 0 || playerNames.Count > options.Value.MaxProfileLookupCount)
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        if (playerNames.Count == 0 || playerNames.Count > options.MaxProfileLookupCount)
         {
             throw new YggdrasilException(
                 StatusCodes.Status400BadRequest,
                 "IllegalArgumentException",
-                $"The requested profile name count must be between 1 and {options.Value.MaxProfileLookupCount}.");
+                $"The requested profile name count must be between 1 and {options.MaxProfileLookupCount}.");
         }
 
         var normalizedNames = playerNames.Select(name =>
@@ -288,24 +291,25 @@ public sealed partial class YggdrasilService(
 
     public async Task<SessionProfileResponse?> GetSessionProfileAsync(Guid playerId, bool unsigned, CancellationToken cancellationToken)
     {
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var player = await dbContext.Players
             .AsNoTracking()
             .Include(entity => entity.SkinTexture)
             .Include(entity => entity.CapeTexture)
             .FirstOrDefaultAsync(entity => entity.Id == playerId, cancellationToken);
 
-        return player is null ? null : BuildSessionProfile(player, unsigned);
+        return player is null ? null : BuildSessionProfile(player, unsigned, options);
     }
 
-    private SessionProfileResponse BuildSessionProfile(Player player, bool unsigned)
+    private SessionProfileResponse BuildSessionProfile(Player player, bool unsigned, YggdrasilOptions options)
     {
         var textureMap = new Dictionary<string, object>();
-        var skinTextureId = player.SkinTexture?.Id ?? options.Value.DefaultSkinTextureId;
+        var skinTextureId = player.SkinTexture?.Id ?? options.DefaultSkinTextureId;
         if (skinTextureId is not null)
         {
             textureMap["SKIN"] = new
             {
-                url = TextureUrl(skinTextureId.Value),
+                url = TextureUrl(skinTextureId.Value, options),
                 metadata = new
                 {
                     model = player.SkinModel == SkinModel.Slim ? "slim" : "default"
@@ -317,7 +321,7 @@ public sealed partial class YggdrasilService(
         {
             textureMap["CAPE"] = new
             {
-                url = TextureUrl(player.CapeTexture.Id)
+                url = TextureUrl(player.CapeTexture.Id, options)
             };
         }
 
@@ -337,9 +341,9 @@ public sealed partial class YggdrasilService(
             [new SessionProfileProperty("textures", value, signature)]);
     }
 
-    private string TextureUrl(Guid textureId)
+    private static string TextureUrl(Guid textureId, YggdrasilOptions options)
     {
-        return $"{options.Value.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{textureId:N}.png";
+        return $"{options.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{textureId:N}.png";
     }
 
     private static void ValidatePlayerName(string playerName)
@@ -368,9 +372,9 @@ public sealed partial class YggdrasilService(
 
     #region Metadata
 
-    public object GetMetadata()
+    public async Task<object> GetMetadataAsync(CancellationToken cancellationToken)
     {
-        var value = options.Value;
+        var value = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var meta = new Dictionary<string, object?>
         {
             ["serverName"] = value.ServerName,
@@ -405,7 +409,7 @@ public sealed partial class YggdrasilService(
 
     #region Token
 
-    private string CreateAccessToken(YggdrasilClient client)
+    private string CreateAccessToken(YggdrasilClient client, YggdrasilOptions options)
     {
         var now = DateTimeOffset.UtcNow;
         var header = new Dictionary<string, object>
@@ -415,11 +419,11 @@ public sealed partial class YggdrasilService(
         };
         var payload = new Dictionary<string, object>
         {
-            ["iss"] = options.Value.ImplementationName,
+            ["iss"] = options.ImplementationName,
             ["sub"] = client.Id.ToString("D"),
             ["version"] = client.Version,
             ["iat"] = now.ToUnixTimeSeconds(),
-            ["exp"] = now.AddHours(options.Value.AccessTokenExpireHours).ToUnixTimeSeconds()
+            ["exp"] = now.AddHours(options.AccessTokenExpireHours).ToUnixTimeSeconds()
         };
 
         var headerSegment = YggdrasilFormat.Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header));

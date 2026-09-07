@@ -22,6 +22,24 @@ namespace Renatus.Host.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Renatus.Host.Entity.AppConfiguration", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("AppConfigurations");
+                });
+
             modelBuilder.Entity("Renatus.Host.Entity.Player", b =>
                 {
                     b.Property<Guid>("Id")

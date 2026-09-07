@@ -11,6 +11,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Texture> Textures => Set<Texture>();
     public DbSet<UserTextureFavorite> UserTextureFavorites => Set<UserTextureFavorite>();
     public DbSet<YggdrasilClient> YggdrasilClients => Set<YggdrasilClient>();
+    public DbSet<AppConfiguration> AppConfigurations => Set<AppConfiguration>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -121,6 +122,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .HasForeignKey(client => client.PlayerId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        modelBuilder.Entity<AppConfiguration>(entity =>
+        {
+            entity.HasKey(configuration => configuration.Key);
+            entity.Property(configuration => configuration.Key).HasMaxLength(128).IsRequired();
+            entity.Property(configuration => configuration.Value).HasColumnType("jsonb").IsRequired();
+            entity.Property(configuration => configuration.UpdatedAt).IsRequired();
+        });
     }
 
     private void ApplyTimestamps()
@@ -186,6 +195,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             if (entry.State == EntityState.Added)
             {
                 entry.Entity.CreatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<AppConfiguration>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
             }
         }
     }

@@ -7,6 +7,7 @@ public sealed record SiteConfigDto(
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("description")] string Description,
     [property: JsonPropertyName("loginAnnouncement")] SiteAnnouncementDto LoginAnnouncement,
+    [property: JsonPropertyName("siteAnnouncement")] SiteAnnouncementDto SiteAnnouncement,
     [property: JsonPropertyName("buttons")] IReadOnlyList<SiteButtonDto> Buttons);
 
 public sealed record SiteAnnouncementDto(

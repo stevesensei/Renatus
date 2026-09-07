@@ -1,15 +1,20 @@
-using Microsoft.Extensions.Options;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 
 namespace Renatus.Host.Service;
 
-public sealed class SiteService(IOptions<SiteOptions> options)
+public sealed class SiteService(AppConfigurationService configurationService)
 {
-    public SiteConfigDto GetConfig()
+    public async Task<SiteConfigDto> GetConfigAsync(CancellationToken cancellationToken)
     {
-        var site = options.Value;
-        var announcement = site.LoginAnnouncement ?? new SiteAnnouncementOptions();
+        var siteTask = configurationService.GetSiteOptionsAsync(cancellationToken);
+        var loginAnnouncementTask = configurationService.GetLoginAnnouncementAsync(cancellationToken);
+        var siteAnnouncementTask = configurationService.GetSiteAnnouncementAsync(cancellationToken);
+        await Task.WhenAll(siteTask, loginAnnouncementTask, siteAnnouncementTask);
+
+        var site = await siteTask;
+        var loginAnnouncement = await loginAnnouncementTask;
+        var siteAnnouncement = await siteAnnouncementTask;
         var buttons = (site.Buttons ?? [])
             .Where(button => !string.IsNullOrWhiteSpace(button.Label) && !string.IsNullOrWhiteSpace(button.Url))
             .Take(3)
@@ -25,9 +30,13 @@ public sealed class SiteService(IOptions<SiteOptions> options)
             site.Title.Trim(),
             site.Description.Trim(),
             new SiteAnnouncementDto(
-                announcement.Title.Trim(),
-                announcement.Body.Trim(),
-                announcement.Image.Trim()),
+                loginAnnouncement.Title.Trim(),
+                loginAnnouncement.Body.Trim(),
+                loginAnnouncement.Image.Trim()),
+            new SiteAnnouncementDto(
+                siteAnnouncement.Title.Trim(),
+                siteAnnouncement.Body.Trim(),
+                siteAnnouncement.Image.Trim()),
             buttons);
     }
 

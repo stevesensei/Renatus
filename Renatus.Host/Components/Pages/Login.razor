@@ -93,20 +93,18 @@
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         _registerMode = string.Equals(Mode, "register", StringComparison.OrdinalIgnoreCase);
         try
         {
-            var config = SiteService.GetConfig();
+            var config = await SiteService.GetConfigAsync(CancellationToken.None);
             _announcement = config.LoginAnnouncement;
         }
         catch (InvalidOperationException exception)
         {
             _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.authLoad"] : exception.Message;
         }
-
-        return Task.CompletedTask;
     }
 
     private void ToggleMode()

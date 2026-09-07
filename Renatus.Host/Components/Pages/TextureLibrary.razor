@@ -2,8 +2,6 @@
 @attribute [AllowAnonymous]
 @implements IAsyncDisposable
 
-@using Microsoft.Extensions.Options
-
 <PageTitle>@L["textures.libraryTitle"] · @L["site.name"]</PageTitle>
 
 <div class="texture-library-page" @ref="_libraryRoot">
@@ -130,10 +128,11 @@
     private string? _loadError;
     private Guid? _favoriteBusy;
     private IJSObjectReference? _module;
+    private string _publicBaseUrl = "";
 
     [Inject] private TextureLibraryService TextureService { get; set; } = default!;
     [Inject] private FrontendUserContext UserContext { get; set; } = default!;
-    [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+    [Inject] private AppConfigurationService ConfigurationService { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
 
@@ -165,11 +164,17 @@
         _loadError = null;
         try
         {
+            var siteOptions = await ConfigurationService.GetSiteOptionsAsync(_cancellation.Token);
+            _publicBaseUrl = AppConfigurationService.NormalizePublicBaseUrl(siteOptions.PublicBaseUrl);
             var userId = await TryGetUserIdAsync();
             _response = await TextureService.GetPublicTexturesAsync(page, PageSize, userId, _cancellation.Token);
             _page = _response.Page;
         }
         catch (TextureException exception)
+        {
+            _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
+        }
+        catch (InvalidOperationException exception)
         {
             _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.textureLoad"] : exception.Message;
         }
@@ -239,7 +244,7 @@
         Navigation.NavigateTo($"/login?returnUrl={returnUrl}", replace: true);
     }
 
-    private string PreviewUrl(Guid id) => $"{YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";
+    private string PreviewUrl(Guid id) => $"{_publicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";
     private static string PreviewLink(Guid id) => $"/texture/preview?id={id:N}";
     private string TextureMetaLabel(PublicTextureDto texture) => texture.Type == TextureType.Cape
         ? $"{L["textures.cape"]} · {texture.Width} × {texture.Height}"

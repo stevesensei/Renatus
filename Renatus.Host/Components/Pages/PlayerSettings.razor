@@ -1,8 +1,6 @@
 @page "/players/{PlayerId:guid}/settings"
 @attribute [Authorize]
 
-@using Microsoft.Extensions.Options
-
 <PageTitle>@L["players.editTextures"] · @L["site.name"]</PageTitle>
 
 <MudStack Spacing="4" Class="renatus-player-settings">
@@ -207,6 +205,7 @@
     private bool _isSaving;
     private string? _loadError;
     private string? _saveError;
+    private string _publicBaseUrl = "";
 
     [Parameter]
     public Guid PlayerId { get; set; }
@@ -215,7 +214,7 @@
     [Inject] private TextureService TextureService { get; set; } = default!;
     [Inject] private TextureLibraryService TextureLibraryService { get; set; } = default!;
     [Inject] private FrontendUserContext UserContext { get; set; } = default!;
-    [Inject] private IOptions<YggdrasilOptions> YggdrasilOptions { get; set; } = default!;
+    [Inject] private AppConfigurationService ConfigurationService { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -231,6 +230,8 @@
         _loadError = null;
         try
         {
+            var siteOptions = await ConfigurationService.GetSiteOptionsAsync(_cancellation.Token);
+            _publicBaseUrl = AppConfigurationService.NormalizePublicBaseUrl(siteOptions.PublicBaseUrl);
             var userId = await UserContext.GetUserIdAsync();
             var player = await PlayerService.GetPlayerAsync(userId, PlayerId, _cancellation.Token);
             var owned = await TextureService.GetUserTexturesAsync(userId, _cancellation.Token);
@@ -263,6 +264,10 @@
             NavigateToLogin();
         }
         catch (PlayerException exception)
+        {
+            _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.playerLoad"] : exception.Message;
+        }
+        catch (InvalidOperationException exception)
         {
             _loadError = string.IsNullOrWhiteSpace(exception.Message) ? L["errors.playerLoad"] : exception.Message;
         }
@@ -314,7 +319,7 @@
     private void ClearLoadError() => _loadError = null;
     private void ClearSaveError() => _saveError = null;
 
-    private string PreviewUrl(Guid id) => $"{YggdrasilOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";
+    private string PreviewUrl(Guid id) => $"{_publicBaseUrl.TrimEnd('/')}/api/yggdrasil/textures/{id:N}.png";
     private string ModelLabel(SkinModel model) => model == SkinModel.Slim ? L["textures.slim"] : L["textures.standard"];
 
     private void NavigateToLogin() =>

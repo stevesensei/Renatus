@@ -1,6 +1,7 @@
 @page "/dashboard"
 @attribute [Authorize]
 @implements IDisposable
+@using Markdig
 
 <PageTitle>@L["textures.title"]</PageTitle>
 
@@ -50,7 +51,9 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["site.announcement"]</MudText>
                 <MudText Typo="Typo.h5" Class="renatus-announcement-title">@(_announcement?.Title ?? L["site.welcome"])</MudText>
-                <MudText Typo="Typo.body1" Class="renatus-muted">@(_announcement?.Body ?? L["site.signInToContinue"])</MudText>
+                <div class="mud-typography mud-typography-body1 renatus-muted renatus-markdown">
+                    @((MarkupString)Markdown.ToHtml(_announcement?.Body ?? L["site.signInToContinue"], MarkdownPipeline))
+                </div>
                 @if (!string.IsNullOrWhiteSpace(_announcement?.Image))
                 {
                     <img class="renatus-announcement-image" src="@_announcement.Image" alt="@(_announcement?.Title ?? L["site.announcement"])" loading="lazy" />
@@ -85,8 +88,8 @@
 
         try
         {
-            var config = SiteService.GetConfig();
-            _announcement = config.LoginAnnouncement;
+            var config = await SiteService.GetConfigAsync(_cancellation.Token);
+            _announcement = config.SiteAnnouncement;
         }
         catch (InvalidOperationException)
         {
@@ -95,4 +98,8 @@
     }
 
     public void Dispose() => _cancellation.Cancel();
+
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()
+        .Build();
 }

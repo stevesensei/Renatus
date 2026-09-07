@@ -7,7 +7,7 @@ public sealed class SiteOptions
     public string HeroImage { get; set; } = "";
     public string Title { get; set; } = "Renatus";
     public string Description { get; set; } = "Minecraft authentication for your community.";
-    public SiteAnnouncementOptions LoginAnnouncement { get; set; } = new();
+    public string PublicBaseUrl { get; set; } = "https://localhost";
     public List<SiteButtonOptions> Buttons { get; set; } = [];
 }
 

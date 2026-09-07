@@ -7,8 +7,8 @@ namespace Renatus.Host.Controller.Yggdrasil;
 public sealed class YggdrasilMetadataController(YggdrasilService yggdrasilService) : ControllerBase
 {
     [HttpGet("")]
-    public IActionResult Root()
+    public async Task<IActionResult> Root(CancellationToken cancellationToken)
     {
-        return Ok(yggdrasilService.GetMetadata());
+        return Ok(await yggdrasilService.GetMetadataAsync(cancellationToken));
     }
 }

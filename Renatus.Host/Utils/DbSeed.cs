@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
+using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Service;
 
@@ -8,18 +10,24 @@ namespace Renatus.Host.Utils;
 
 public static class DbSeed
 {
-    public static async Task InitializeAsync(AppDbContext dbContext, CancellationToken cancellationToken = default)
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public static async Task InitializeAsync(
+        AppDbContext dbContext,
+        IConfiguration configuration,
+        CancellationToken cancellationToken = default)
     {
         var isInitialized = await IsInitializedAsync(dbContext, cancellationToken);
 
         await dbContext.Database.MigrateAsync(cancellationToken);
+        await SeedConfigurationsAsync(dbContext, configuration, cancellationToken);
 
         if (isInitialized)
         {
             return;
         }
 
-        await SeedAsync(dbContext, cancellationToken);
+        await SeedTestDataAsync(dbContext, cancellationToken);
     }
 
     private static async Task<bool> IsInitializedAsync(AppDbContext dbContext, CancellationToken cancellationToken)
@@ -33,7 +41,54 @@ public static class DbSeed
         return appliedMigrations.Any();
     }
 
-    private static async Task SeedAsync(AppDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task SeedConfigurationsAsync(
+        AppDbContext dbContext,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var siteOptions = configuration.GetSection(SiteOptions.SectionName).Get<SiteOptions>() ?? new SiteOptions();
+        siteOptions.PublicBaseUrl = AppConfigurationService.NormalizePublicBaseUrl(siteOptions.PublicBaseUrl);
+
+        var loginAnnouncement = configuration
+            .GetSection("LoginAnnouncement")
+            .Get<SiteAnnouncementOptions>() ?? new SiteAnnouncementOptions();
+        var siteAnnouncement = configuration
+            .GetSection("SiteAnnouncement")
+            .Get<SiteAnnouncementOptions>() ?? new SiteAnnouncementOptions();
+        var yggdrasilOptions = configuration
+            .GetSection("Yggdrasil")
+            .Get<YggdrasilOptions>() ?? new YggdrasilOptions();
+        yggdrasilOptions.PublicBaseUrl = string.Empty;
+        yggdrasilOptions.HomepageUrl = string.Empty;
+        yggdrasilOptions.RegisterUrl = string.Empty;
+        yggdrasilOptions.SkinDomains = [];
+
+        var configurations = new[]
+        {
+            new ConfigurationSeed(AppConfigurationKeys.Site, siteOptions),
+            new ConfigurationSeed(AppConfigurationKeys.LoginAnnouncement, loginAnnouncement),
+            new ConfigurationSeed(AppConfigurationKeys.SiteAnnouncement, siteAnnouncement),
+            new ConfigurationSeed(AppConfigurationKeys.Yggdrasil, yggdrasilOptions)
+        };
+
+        foreach (var seed in configurations)
+        {
+            if (await dbContext.AppConfigurations.AnyAsync(entity => entity.Key == seed.Key, cancellationToken))
+            {
+                continue;
+            }
+
+            dbContext.AppConfigurations.Add(new AppConfiguration
+            {
+                Key = seed.Key,
+                Value = JsonSerializer.Serialize(seed.Value, JsonOptions)
+            });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedTestDataAsync(AppDbContext dbContext, CancellationToken cancellationToken)
     {
         if (await dbContext.Users.AnyAsync(cancellationToken))
         {
@@ -112,4 +167,6 @@ public static class DbSeed
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    private sealed record ConfigurationSeed(string Key, object Value);
 }

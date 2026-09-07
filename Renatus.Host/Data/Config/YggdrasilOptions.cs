@@ -2,7 +2,7 @@ namespace Renatus.Host.Data.Config;
 
 public sealed class YggdrasilOptions
 {
-    public string PublicBaseUrl { get; set; } = "https://localhost";
+    public string PublicBaseUrl { get; set; } = "";
     public int AccessTokenExpireHours { get; set; } = 24;
     public int JoinSessionTtlSeconds { get; set; } = 30;
     public int MaxProfileLookupCount { get; set; } = 100;
