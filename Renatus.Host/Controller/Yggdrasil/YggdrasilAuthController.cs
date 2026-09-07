@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Renatus.Host.Data;
 using Renatus.Host.Service;
@@ -11,11 +12,13 @@ public sealed class YggdrasilAuthController(YggdrasilService yggdrasilService) :
     [HttpPost("authenticate")]
     public async Task<ActionResult<AuthenticateResponse>> Authenticate(
         AuthenticateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,ILogger<YggdrasilAuthController> logger)
     {
         try
         {
-            return Ok(await yggdrasilService.AuthenticateAsync(request, cancellationToken));
+            //如果UA包含PCL，则需要将SelectedPlayer置为第一个Player，似乎是奇妙的BUG
+            var data = await yggdrasilService.AuthenticateAsync(request, cancellationToken);
+            return Ok(data);
         }
         catch (YggdrasilException exception)
         {

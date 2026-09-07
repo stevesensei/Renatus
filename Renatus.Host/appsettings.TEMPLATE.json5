@@ -1,0 +1,83 @@
+﻿//After you fill the values below, rename this file to appsettings.json to bootup Renatus Server.
+//请在你填写完以下配置后，将此文件重命名为 appsettings.json 以启动 Renatus。
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
+    }
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft.AspNetCore": "Warning",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    }
+  },
+  //PostgreSQL & Redis connection strings, please fill in your database connection information below.
+  //If you need more about connection string, please refer to https://www.npgsql.org/doc/connection-string-parameters.html.
+  //PostgreSQL 和 Redis 的连接字符串，请在下方填写你的数据库连接信息。
+  //如果你需要更多关于连接字符串的内容，请参考 https://www.npgsql.org/doc/connection-string-parameters.html。
+  "ConnectionStrings": {
+    "Default": "Host=<IP>;Port=<port>;Database=<DATABASE_NAME>;Username=<USERNAME>;Password=<PASSWORD>",
+    "Redis": "<IP>:6379,password=<PASSWORD,OPTIONAL>"
+  },
+  //此内容仅在初次启动时可用
+  "Yggdrasil": {
+    "PublicBaseUrl": "",
+    "AccessTokenExpireHours": 24,
+    "JoinSessionTtlSeconds": 30,
+    "MaxProfileLookupCount": 100,
+    "ServerName": "HLJU Minecraft Auth Server",
+    "ImplementationName": "Renatus",
+    "ImplementationVersion": "0.1.0",
+    "HomepageUrl": "",
+    "RegisterUrl": "",
+    "NonEmailLogin": true,
+    "LegacySkinApi": false,
+    "NoMojangNamespace": false,
+    "EnableMojangAntiFeatures": false,
+    "EnableProfileKey": false,
+    "UsernameCheck": false,
+    "SigningPrivateKeyPem": "",
+    "SkinDomains": [],
+    "DefaultSkinTextureId": null
+  },
+  "Auth": {
+    "JwtIssuer": "Renatus",
+    "JwtAudience": "Renatus.Frontend",
+    "JwtSigningKey": "development-only-change-this-renatus-auth-signing-key-64-chars",
+    "JwtExpireDays": 3,
+    "SessionKeyTtlSeconds": 120,
+    "TimestampSkewSeconds": 120
+  },
+  "Site": {
+    "PublicBaseUrl": "http://localhost:5294/",
+    "HeroImage": "https://localhost:5294/images/renatus-hero.png",
+    "Title": "HLJUMC",
+    "Description": "黑龙江大学非官方MC服务器认证系统",
+    "Buttons": [
+      {
+        "Label": "Github仓库",
+        "Url": "https://github.com/stevesensei/Renatus",
+        "Style": "secondary",
+        "Target": "_blank"
+      }
+    ]
+  },
+  "LoginAnnouncement": {
+    "Title": "告示",
+    "Body": "本网站开启邮箱域限制，请使用后缀为@s.hlju.edu.cn或@hlju.edu.cn的邮箱注册.",
+    "Image": ""
+  },
+  "SiteAnnouncement": {
+    "Title": "网站公告",
+    "Body": "欢迎来到 **HLJUMC**。",
+    "Image": ""
+  },
+  "AllowedHosts": "*"
+}

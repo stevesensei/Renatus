@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -14,6 +15,7 @@ using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Components;
 using Renatus.Host.Frontend.Services;
+using Renatus.Host.Middleware;
 using Renatus.Host.Service;
 using Renatus.Host.Service.Cache;
 using Renatus.Host.Utils;
@@ -21,6 +23,13 @@ using Scalar.AspNetCore;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+var appSettingsPath = Path.Combine(builder.Environment.ContentRootPath, "appsettings.json");
+if (!File.Exists(appSettingsPath))
+{
+    throw new FileNotFoundException(
+        $"Required configuration file '{appSettingsPath}' was not found. Create appsettings.json and restart the application.",
+        appSettingsPath);
+}
 
 builder.WebHost.UseStaticWebAssets();
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("zh-CN");
@@ -28,6 +37,7 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
+//builder.Services.Configure<RequestResponseLoggingOptions>(builder.Configuration.GetSection("RequestResponseLogging"));
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
@@ -48,7 +58,10 @@ builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();
 builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+});;
 builder.Services.AddEndpointsApiExplorer();
 
 var authOptions = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
@@ -125,6 +138,8 @@ using (var scope = app.Services.CreateScope())
 var appConfigurationService = app.Services.GetRequiredService<AppConfigurationService>();
 var yggdrasilOptions = await appConfigurationService.GetYggdrasilOptionsAsync(CancellationToken.None);
 app.Services.GetRequiredService<YggdrasilSigningKey>().Initialize(yggdrasilOptions.SigningPrivateKeyPem);
+
+//app.UseMiddleware<RequestResponseLoggingMiddleware>();
 
 app.Use(async (context, next) =>
 {

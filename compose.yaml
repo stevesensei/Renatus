@@ -5,3 +5,52 @@
       context: .
       dockerfile: Renatus.Host/Dockerfile
 
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-renatus};Username=${POSTGRES_USER:-renatus};Password=${POSTGRES_PASSWORD:-renatus-change-me}
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:-redis-change-me}
+      Auth__JwtSigningKey: ${AUTH_JWT_SIGNING_KEY:-replace-this-jwt-signing-key-before-production-use-0123456789}
+      Site__PublicBaseUrl: ${SITE_PUBLIC_BASE_URL:-http://localhost:5294}
+    ports:
+      - "5294:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-renatus}
+      POSTGRES_USER: ${POSTGRES_USER:-renatus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-renatus-change-me}
+    volumes:
+      - renatus-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis-change-me}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-change-me}
+    volumes:
+      - renatus-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  renatus-postgres-data:
+  renatus-redis-data:
+
