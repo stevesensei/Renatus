@@ -29,13 +29,7 @@ public sealed class AdminMappingProfile : Profile
         CreateMap<Player, AdminPlayerDetailDto>()
             .ForCtorParam(
                 nameof(AdminPlayerDetailDto.UserName),
-                options => options.MapFrom((player, parentContext) => ResolveOwnerUserName(player, parentContext)))
-            .ForCtorParam(
-                nameof(AdminPlayerDetailDto.SkinTexture),
-                options => options.MapFrom((player, _) => player.SkinTexture))
-            .ForCtorParam(
-                nameof(AdminPlayerDetailDto.CapeTexture),
-                options => options.MapFrom((player, _) => player.CapeTexture));
+                options => options.MapFrom((player, parentContext) => ResolveOwnerUserName(player, parentContext)));
 
         CreateMap<Texture, AdminTextureRefDto>();
 

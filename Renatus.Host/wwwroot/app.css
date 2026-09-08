@@ -150,7 +150,6 @@ textarea:focus-visible,
 }
 
 .renatus-top-nav,
-.renatus-shell-user,
 .renatus-toolbar-actions {
     display: flex;
     align-items: center;
@@ -167,11 +166,75 @@ textarea:focus-visible,
     display: none;
 }
 
-.renatus-shell-name {
-    max-width: 12rem;
+.renatus-profile-menu {
+    margin-inline-start: 4px;
+}
+
+.renatus-profile-trigger {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+}
+
+.renatus-profile-trigger .mud-button-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.renatus-profile-popover {
+    min-width: 280px;
+    max-width: min(320px, calc(100vw - 24px));
+}
+
+.renatus-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+}
+
+.renatus-profile-copy,
+.renatus-profile-details,
+.renatus-profile-detail {
+    min-width: 0;
+}
+
+.renatus-profile-copy {
+    flex: 1;
+}
+
+.renatus-profile-name,
+.renatus-profile-value {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.renatus-profile-role,
+.renatus-profile-label {
+    color: var(--renatus-muted);
+}
+
+.renatus-profile-details {
+    display: grid;
+    gap: 12px;
+    padding: 4px 16px 16px;
+}
+
+.renatus-profile-detail {
+    display: grid;
+    gap: 2px;
+}
+
+.renatus-profile-value {
+    color: var(--renatus-ink);
+}
+
+.renatus-profile-divider {
+    margin: 0 16px;
 }
 
 .renatus-home-page {
@@ -530,8 +593,7 @@ textarea:focus-visible,
     }
 
     .renatus-nav-button,
-    .renatus-account-button,
-    .renatus-logout-button {
+    .renatus-account-button {
         flex: 0 0 40px;
         width: 40px;
         min-width: 40px;
@@ -540,19 +602,17 @@ textarea:focus-visible,
     }
 
     .renatus-nav-button .renatus-button-text,
-    .renatus-account-button .renatus-button-text,
-    .renatus-logout-button .renatus-button-text {
+    .renatus-account-button .renatus-button-text {
         display: none;
     }
 
     .renatus-nav-button .mud-icon-root,
-    .renatus-account-button .mud-icon-root,
-    .renatus-logout-button .mud-icon-root {
+    .renatus-account-button .mud-icon-root {
         margin: 0 !important;
     }
 
-    .renatus-shell-user {
-        display: none;
+    .renatus-profile-menu {
+        margin-inline-start: 0;
     }
 
     .renatus-home-content {

@@ -61,7 +61,13 @@ public sealed class TextureService(
         };
 
         dbContext.Textures.Add(texture);
+        dbContext.UserTextureFavorites.Add(new UserTextureFavorite
+        {
+            UserId = userId,
+            TextureId = texture.Id
+        });
         await dbContext.SaveChangesAsync(cancellationToken);
+        await RemoveFavoriteCachesAsync([userId], cancellationToken);
         if (texture.IsPublic)
         {
             await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
@@ -95,59 +101,96 @@ public sealed class TextureService(
             throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
         }
 
-        var affectedUserIds = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
+        var affectedPlayers = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
+        var favoriteUserIds = await GetFavoriteUserIdsAsync(dbContext, textureId, cancellationToken);
         dbContext.Textures.Remove(texture);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        foreach (var affectedUserId in affectedUserIds)
-        {
-            await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(affectedUserId), cancellationToken);
-        }
+        await RemoveAffectedPlayerCachesAsync(affectedPlayers, cancellationToken);
+        await RemoveFavoriteCachesAsync(favoriteUserIds, cancellationToken);
 
         await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
         await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
         await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
-        await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteIdsCacheKey(userId), cancellationToken);
-        await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteTexturesCacheKey(userId), cancellationToken);
-
         return ToDto(texture);
     }
 
-    private async Task<Guid[]> ClearPlayerTextureReferencesAsync(
+    private async Task<(Guid UserId, Guid PlayerId)[]> ClearPlayerTextureReferencesAsync(
         AppDbContext dbContext,
         Texture texture,
         CancellationToken cancellationToken)
     {
+        var affectedPlayerQuery = texture.Type == TextureType.Skin
+            ? dbContext.Players.Where(player => player.SkinTextureId == texture.Id)
+            : dbContext.Players.Where(player => player.CapeTextureId == texture.Id);
+        var affectedPlayers = await affectedPlayerQuery
+            .Select(player => new { player.UserId, PlayerId = player.Id })
+            .ToArrayAsync(cancellationToken);
+
+        var updatedAt = DateTimeOffset.UtcNow;
         if (texture.Type == TextureType.Skin)
         {
-            var affectedUserIds = await dbContext.Players
-                .Where(player => player.SkinTextureId == texture.Id)
-                .Select(player => player.UserId)
-                .Distinct()
-                .ToArrayAsync(cancellationToken);
-
             await dbContext.Players
                 .Where(player => player.SkinTextureId == texture.Id)
                 .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(player => player.SkinTextureId, player => (Guid?)null),
+                    setters => setters
+                        .SetProperty(player => player.SkinTextureId, player => (Guid?)null)
+                        .SetProperty(player => player.SkinModel, player => SkinModel.Default)
+                        .SetProperty(player => player.UpdatedAt, player => updatedAt),
                     cancellationToken);
-
-            return affectedUserIds;
+        }
+        else
+        {
+            await dbContext.Players
+                .Where(player => player.CapeTextureId == texture.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(player => player.CapeTextureId, player => (Guid?)null)
+                        .SetProperty(player => player.UpdatedAt, player => updatedAt),
+                    cancellationToken);
         }
 
-        var capeAffectedUserIds = await dbContext.Players
-            .Where(player => player.CapeTextureId == texture.Id)
-            .Select(player => player.UserId)
+        return affectedPlayers.Select(player => (player.UserId, player.PlayerId)).ToArray();
+    }
+
+    private static async Task<Guid[]> GetFavoriteUserIdsAsync(
+        AppDbContext dbContext,
+        Guid textureId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.UserTextureFavorites
+            .Where(favorite => favorite.TextureId == textureId)
+            .Select(favorite => favorite.UserId)
             .Distinct()
             .ToArrayAsync(cancellationToken);
+    }
 
-        await dbContext.Players
-            .Where(player => player.CapeTextureId == texture.Id)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(player => player.CapeTextureId, player => (Guid?)null),
+    private async Task RemoveAffectedPlayerCachesAsync(
+        (Guid UserId, Guid PlayerId)[] affectedPlayers,
+        CancellationToken cancellationToken)
+    {
+        foreach (var userId in affectedPlayers.Select(player => player.UserId).Distinct())
+        {
+            await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(userId), cancellationToken);
+        }
+
+        foreach (var player in affectedPlayers)
+        {
+            await cacheService.RemoveAsync(
+                PlayerService.PlayerCacheKey(player.UserId, player.PlayerId),
                 cancellationToken);
+        }
+    }
 
-        return capeAffectedUserIds;
+    private async Task RemoveFavoriteCachesAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        foreach (var userId in userIds)
+        {
+            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteIdsCacheKey(userId), cancellationToken);
+            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteTexturesCacheKey(userId), cancellationToken);
+        }
     }
 
     private static async Task EnsureUserAvailableAsync(
@@ -403,20 +446,13 @@ public sealed class TextureService(
             throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
         }
 
-        var affectedUserIds = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
+        var affectedPlayers = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
+        var favoriteUserIds = await GetFavoriteUserIdsAsync(dbContext, textureId, cancellationToken);
         dbContext.Textures.Remove(texture);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        foreach (var affectedUserId in affectedUserIds)
-        {
-            await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(affectedUserId), cancellationToken);
-        }
-
-        if (texture.UserId is not null)
-        {
-            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteIdsCacheKey(texture.UserId.Value), cancellationToken);
-            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteTexturesCacheKey(texture.UserId.Value), cancellationToken);
-        }
+        await RemoveAffectedPlayerCachesAsync(affectedPlayers, cancellationToken);
+        await RemoveFavoriteCachesAsync(favoriteUserIds, cancellationToken);
 
         await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
         await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);

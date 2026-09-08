@@ -173,10 +173,17 @@ public sealed class TextureLibraryService(
         await EnsureUserAvailableAsync(dbContext, userId, cancellationToken);
 
         var favorite = await dbContext.UserTextureFavorites
+            .Include(entity => entity.Texture)
             .FirstOrDefaultAsync(
                 entity => entity.UserId == userId && entity.TextureId == textureId,
                 cancellationToken);
-        if (favorite is not null)
+        if (favorite is null)
+        {
+            await RemoveFavoriteCachesAsync(userId, cancellationToken);
+            return new FavoriteTextureResponse(textureId, false);
+        }
+
+        if (favorite.Texture.UserId != userId)
         {
             dbContext.UserTextureFavorites.Remove(favorite);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -184,7 +191,7 @@ public sealed class TextureLibraryService(
 
         await RemoveFavoriteCachesAsync(userId, cancellationToken);
 
-        return new FavoriteTextureResponse(textureId, false);
+        return new FavoriteTextureResponse(textureId, favorite.Texture.UserId == userId);
     }
 
     public async Task<UserFavoriteTexturesResponse> GetUserFavoriteTexturesAsync(

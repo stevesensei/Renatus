@@ -26,11 +26,39 @@
         </nav>
         <AuthorizeView>
             <Authorized>
-                <div class="renatus-shell-user">
-                    <MudAvatar Color="Color.Secondary" Size="Size.Small">@Initials</MudAvatar>
-                    <MudText Typo="Typo.body2" Class="renatus-shell-name">@_displayName</MudText>
-                </div>
-                <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-logout-button" StartIcon="@Icons.Material.Filled.Logout" OnClick="@SignOut" title='@L["site.logout"]' aria-label='@L["site.logout"]'><span class="renatus-button-text">@L["site.logout"]</span></MudButton>
+                <MudMenu Class="renatus-profile-menu" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" PopoverClass="renatus-profile-popover" AriaLabel='@L["site.accountMenu"]'>
+                    <ActivatorContent Context="menuContext">
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-profile-trigger" OnClick="@menuContext.ToggleAsync" title='@L["site.accountMenu"]' aria-label='@L["site.accountMenu"]' aria-haspopup="menu">
+                            <MudAvatar Color="Color.Secondary" Size="Size.Small">@Initials</MudAvatar>
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <div class="renatus-profile-summary">
+                            <MudAvatar Color="Color.Secondary" Size="Size.Large">@Initials</MudAvatar>
+                            <div class="renatus-profile-copy">
+                                <MudText Typo="Typo.subtitle1" Class="renatus-profile-name">@DisplayName</MudText>
+                                <MudText Typo="Typo.caption" Class="renatus-profile-role">@(_isAdmin ? L["site.administrator"] : L["site.member"])</MudText>
+                            </div>
+                        </div>
+                        <MudDivider Class="renatus-profile-divider" />
+                        <div class="renatus-profile-details">
+                            <div class="renatus-profile-detail">
+                                <MudText Typo="Typo.caption" Class="renatus-profile-label">@L["site.username"]</MudText>
+                                <MudText Typo="Typo.body2" Class="renatus-profile-value">@_userName</MudText>
+                            </div>
+                            <div class="renatus-profile-detail">
+                                <MudText Typo="Typo.caption" Class="renatus-profile-label">@L["site.nickname"]</MudText>
+                                <MudText Typo="Typo.body2" Class="renatus-profile-value">@DisplayName</MudText>
+                            </div>
+                        </div>
+                        <MudDivider Class="renatus-profile-divider" />
+                        @if (_isAdmin)
+                        {
+                            <MudMenuItem Href="/admin" Icon="@Icons.Material.Filled.AdminPanelSettings">@L["site.adminPanel"]</MudMenuItem>
+                        }
+                        <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="@SignOut">@L["site.logout"]</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
             </Authorized>
             <NotAuthorized>
                 <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-account-button" StartIcon="@Icons.Material.Filled.Login" Href="/login" title='@L["site.login"]' aria-label='@L["site.login"]'><span class="renatus-button-text">@L["site.login"]</span></MudButton>
@@ -65,7 +93,8 @@
     private bool _isHomePage = true;
     private bool _usesContainedContent;
     private string? _userName;
-    private string? _displayName;
+    private string? _nickname;
+    private bool _isAdmin;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationState { get; set; }
@@ -101,13 +130,16 @@
         {
             var state = await AuthenticationState;
             _userName = state.User.Identity?.Name;
-            _displayName = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? _userName;
+            _nickname = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+            _isAdmin = state.User.IsInRole(nameof(UserRole.Admin));
         }
     }
 
+    private string DisplayName => string.IsNullOrWhiteSpace(_nickname) ? _userName ?? L["site.name"] : _nickname;
+
     private string Initials => string.Join(
         string.Empty,
-        (_displayName ?? _userName ?? L["site.name"])
+        DisplayName
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Take(2)
             .Select(part => part[0]))

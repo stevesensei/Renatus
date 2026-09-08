@@ -59,10 +59,10 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 - **Accessibility**: labels, field-level validation, live error alert, disabled submit while loading.
 
 ### Top navigation shell
-- **Structure**: brand, top navigation buttons, nickname, initials avatar, and session actions in the app bar.
+- **Structure**: brand, top navigation buttons, and an avatar-only profile trigger in the app bar. The profile popover contains the large avatar, username, nickname, session action, and an admin-panel entry for administrators.
 - **Variants**: transparent auth app bar, image-page app bar, and authenticated glass app bar.
-- **States**: anonymous and authenticated.
-- **Accessibility**: named navigation actions and avatar fallback text.
+- **States**: anonymous, authenticated/closed, authenticated/open, and authenticated-admin/open.
+- **Accessibility**: the avatar trigger has a localized accessible name and menu semantics; profile values keep visible labels; menu actions remain keyboard reachable.
 
 ### Dashboard panels
 - **Structure**: page header, compact metric strip, upload panel, library grid, and player cards.
@@ -89,6 +89,7 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 
 ## 6. Motion & Interaction
 - Buttons use MudBlazor's built-in hover, focus, and pressed states plus tokenized CSS transitions for panel lift.
+- The profile popover opens from the avatar with MudBlazor's anchored menu transition, closes on outside click or Escape, and keeps the avatar as the stable trigger. Reduced-motion users receive the same menu content without decorative transition emphasis.
 - Page surfaces use a short opacity/transform entry only where the existing shell permits it.
 - Skin preview actions use a 180ms ease-out color/opacity transition; the selected action uses a persistent indicator, and `prefers-reduced-motion` removes the canvas hint pulse and surface entry transform.
 - Reduced-motion users receive the same content without decorative motion.
