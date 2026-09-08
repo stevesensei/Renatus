@@ -1,0 +1,159 @@
+@page "/admin/announcements"
+@attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
+
+<PageTitle>@L["admin.announcementManagement"] · @L["site.name"]</PageTitle>
+
+<MudStack Spacing="4" Class="renatus-admin-page">
+    <section class="renatus-page-hero" aria-labelledby="admin-announcements-title">
+        <div>
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["admin.site"]</MudText>
+            <MudText Typo="Typo.h3" id="admin-announcements-title">@L["admin.announcementManagement"]</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@L["admin.announcementManagementDescription"]</MudText>
+        </div>
+        <MudButton Href="/admin/site" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Settings">
+            @L["admin.siteSettings"]
+        </MudButton>
+    </section>
+
+    @if (_errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" aria-live="assertive">@_errorMessage</MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudPaper Class="renatus-panel renatus-loading-card" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            <MudText Class="renatus-muted">@L["admin.loading"]</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="renatus-panel admin-form-panel" Elevation="0">
+            <div class="renatus-panel-heading">
+                <div>
+                    <MudText Typo="Typo.h5">@L["admin.loginAnnouncement"]</MudText>
+                    <MudText Typo="Typo.body2" Class="renatus-muted">@L["admin.loginAnnouncementDescription"]</MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveLoginAsync" Disabled="@_savingLogin">
+                    @(_savingLogin ? L["admin.saving"] : L["admin.save"])
+                </MudButton>
+            </div>
+            <div class="admin-form-grid">
+                <MudTextField @bind-Value="_loginAnnouncement.Title" Label='@L["admin.announcementTitle"]' MaxLength="160" Required="true" />
+                <MudTextField @bind-Value="_loginAnnouncement.Image" Label='@L["admin.announcementImage"]' MaxLength="1024" />
+            </div>
+            <AdminMarkdownEditor @bind-Value="_loginAnnouncement.Body"
+                                 Label='@L["admin.announcementBody"]'
+                                 EditorLabel='@L["admin.markdownInput"]'
+                                 PreviewLabel='@L["admin.markdownPreview"]'
+                                 Hint='@L["admin.markdownHint"]'
+                                 EmptyText='@L["admin.markdownEmpty"]' />
+        </MudPaper>
+
+        <MudPaper Class="renatus-panel admin-form-panel" Elevation="0">
+            <div class="renatus-panel-heading">
+                <div>
+                    <MudText Typo="Typo.h5">@L["admin.siteAnnouncement"]</MudText>
+                    <MudText Typo="Typo.body2" Class="renatus-muted">@L["admin.siteAnnouncementDescription"]</MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSiteAsync" Disabled="@_savingSite">
+                    @(_savingSite ? L["admin.saving"] : L["admin.save"])
+                </MudButton>
+            </div>
+            <div class="admin-form-grid">
+                <MudTextField @bind-Value="_siteAnnouncement.Title" Label='@L["admin.announcementTitle"]' MaxLength="160" Required="true" />
+                <MudTextField @bind-Value="_siteAnnouncement.Image" Label='@L["admin.announcementImage"]' MaxLength="1024" />
+            </div>
+            <AdminMarkdownEditor @bind-Value="_siteAnnouncement.Body"
+                                 Label='@L["admin.announcementBody"]'
+                                 EditorLabel='@L["admin.markdownInput"]'
+                                 PreviewLabel='@L["admin.markdownPreview"]'
+                                 Hint='@L["admin.markdownHint"]'
+                                 EmptyText='@L["admin.markdownEmpty"]' />
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private readonly CancellationTokenSource _cancellation = new();
+    private SiteAnnouncementOptions _loginAnnouncement = new();
+    private SiteAnnouncementOptions _siteAnnouncement = new();
+    private string? _errorMessage;
+    private bool _loading = true;
+    private bool _savingLogin;
+    private bool _savingSite;
+
+    [Inject] private AppConfigurationService ConfigurationService { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var loginTask = ConfigurationService.GetLoginAnnouncementAsync(_cancellation.Token);
+            var siteTask = ConfigurationService.GetSiteAnnouncementAsync(_cancellation.Token);
+            await Task.WhenAll(loginTask, siteTask);
+            _loginAnnouncement = CloneAnnouncement(await loginTask);
+            _siteAnnouncement = CloneAnnouncement(await siteTask);
+        }
+        catch (InvalidOperationException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["admin.loadError"] : exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveLoginAsync()
+    {
+        await SaveAsync(
+            _loginAnnouncement,
+            () => _savingLogin = true,
+            value => _savingLogin = value,
+            ConfigurationService.UpdateLoginAnnouncementAsync);
+    }
+
+    private async Task SaveSiteAsync()
+    {
+        await SaveAsync(
+            _siteAnnouncement,
+            () => _savingSite = true,
+            value => _savingSite = value,
+            ConfigurationService.UpdateSiteAnnouncementAsync);
+    }
+
+    private async Task SaveAsync(
+        SiteAnnouncementOptions announcement,
+        Action startSaving,
+        Action<bool> setSaving,
+        Func<SiteAnnouncementOptions, CancellationToken, Task> save)
+    {
+        startSaving();
+        _errorMessage = null;
+        try
+        {
+            await save(announcement, _cancellation.Token);
+            Snackbar.Add(L["admin.saved"], Severity.Success);
+        }
+        catch (InvalidOperationException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["admin.saveError"] : exception.Message;
+        }
+        finally
+        {
+            setSaving(false);
+        }
+    }
+
+    public void Dispose() => _cancellation.Cancel();
+
+    private static SiteAnnouncementOptions CloneAnnouncement(SiteAnnouncementOptions value) => new()
+    {
+        Title = value.Title,
+        Body = value.Body,
+        Image = value.Image
+    };
+}

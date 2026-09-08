@@ -76,9 +76,21 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 - **Accessibility**: canvas has a descriptive label; every icon button has an accessible name; animation controls expose `aria-pressed`; all essential metadata is text, not color-only.
 
 ### Admin shell and management pages
-- **Structure**: the authenticated app bar switches to an admin-only navigation set with Home, Overview, Users, Players, and Textures actions. Management pages keep the same top hero card as player management, followed by metric, filter, table, detail, and confirmation surfaces.
+- **Structure**: the authenticated app bar switches to an admin-only navigation set with Home, Overview, a Site management category, and an Accounts & resources category. Category menus expose Site settings, Announcements, Users, Players, and Textures. Management pages keep the same top hero card as player management, followed by metric, filter, table, detail, form, and confirmation surfaces.
 - **States**: admin overview loading/error/ready, paginated list loading/empty/error, detail/edit dialog, mutation busy/success/error, and destructive confirmation.
 - **Accessibility**: admin routes require the Admin role; each management action has an accessible name, table values remain readable without color, and destructive actions require explicit confirmation.
+
+### Admin configuration and announcement editor
+- **Structure**: site settings use grouped identity and quick-link forms. Announcement management provides separate login and in-app announcement forms, each with a Markdown input and live rendered preview.
+- **States**: loading, load error, editing, saving, saved feedback, and empty Markdown preview.
+- **Tokens**: editor preview uses page `--renatus-page`, surface `--renatus-surface`, border `--renatus-border`, and the existing typography/spacing scale.
+- **Accessibility**: category menus expose their purpose through localized labels; the editor keeps a visible label and the preview announces content updates without executing raw HTML.
+
+### Account settings
+- **Structure**: the account page keeps the shared hero card, then places profile identity/avatar controls beside a password reset form.
+- **States**: loading, load error, profile editing, avatar selected/cleared, profile save busy/error, and password reset busy/error/success.
+- **Tokens**: profile and password panels use the existing surface, page, border, and accent action tokens.
+- **Accessibility**: every account field has a visible label; avatar upload has a labelled file control; password errors and save feedback are announced inline.
 
 ### Texture library card grid
 - **Structure**: bounded page hero, small stat strip, responsive three-column card grid, and a compact pagination footer.

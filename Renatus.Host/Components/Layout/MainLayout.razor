@@ -19,9 +19,29 @@
             {
                 <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Home" title='@L["nav.home"]' aria-label='@L["nav.home"]'><span class="renatus-button-text">@L["nav.home"]</span></MudButton>
                 <MudButton Href="/admin" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Dashboard" title='@L["admin.overview"]' aria-label='@L["admin.overview"]'><span class="renatus-button-text">@L["admin.overview"]</span></MudButton>
-                <MudButton Href="/admin/users" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.ManageAccounts" title='@L["admin.users"]' aria-label='@L["admin.users"]'><span class="renatus-button-text">@L["admin.users"]</span></MudButton>
-                <MudButton Href="/admin/players" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.People" title='@L["admin.players"]' aria-label='@L["admin.players"]'><span class="renatus-button-text">@L["admin.players"]</span></MudButton>
-                <MudButton Href="/admin/textures" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Palette" title='@L["admin.textures"]' aria-label='@L["admin.textures"]'><span class="renatus-button-text">@L["admin.textures"]</span></MudButton>
+                <MudMenu Class="renatus-admin-category-menu" PopoverClass="renatus-admin-category-popover" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" AriaLabel='@L["admin.siteCategory"]'>
+                    <ActivatorContent Context="menuContext">
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-admin-category-button" StartIcon="@Icons.Material.Filled.Settings" OnClick="@menuContext.ToggleAsync" title='@L["admin.siteCategory"]' aria-label='@L["admin.siteCategory"]' aria-haspopup="menu">
+                            <span class="renatus-button-text">@L["admin.siteCategory"]</span>
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem Href="/admin/site" Icon="@Icons.Material.Filled.Tune">@L["admin.siteSettings"]</MudMenuItem>
+                        <MudMenuItem Href="/admin/announcements" Icon="@Icons.Material.Filled.Campaign">@L["admin.announcementManagement"]</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+                <MudMenu Class="renatus-admin-category-menu" PopoverClass="renatus-admin-category-popover" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" AriaLabel='@L["admin.resourceCategory"]'>
+                    <ActivatorContent Context="menuContext">
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-admin-category-button" StartIcon="@Icons.Material.Filled.ManageAccounts" OnClick="@menuContext.ToggleAsync" title='@L["admin.resourceCategory"]' aria-label='@L["admin.resourceCategory"]' aria-haspopup="menu">
+                            <span class="renatus-button-text">@L["admin.resourceCategory"]</span>
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts">@L["admin.users"]</MudMenuItem>
+                        <MudMenuItem Href="/admin/players" Icon="@Icons.Material.Filled.People">@L["admin.players"]</MudMenuItem>
+                        <MudMenuItem Href="/admin/textures" Icon="@Icons.Material.Filled.Palette">@L["admin.textures"]</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
             }
             else
             {
@@ -40,12 +60,30 @@
                 <MudMenu Class="renatus-profile-menu" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" PopoverClass="renatus-profile-popover" AriaLabel='@L["site.accountMenu"]'>
                     <ActivatorContent Context="menuContext">
                         <MudButton Color="Color.Inherit" Variant="Variant.Text" Class="renatus-profile-trigger" OnClick="@menuContext.ToggleAsync" title='@L["site.accountMenu"]' aria-label='@L["site.accountMenu"]' aria-haspopup="menu">
-                            <MudAvatar Color="Color.Secondary" Size="Size.Small">@Initials</MudAvatar>
+                            <MudAvatar Color="Color.Secondary" Size="Size.Small">
+                                @if (!string.IsNullOrWhiteSpace(_avatarBase64))
+                                {
+                                    <img src="@_avatarBase64" alt="" />
+                                }
+                                else
+                                {
+                                    @Initials
+                                }
+                            </MudAvatar>
                         </MudButton>
                     </ActivatorContent>
                     <ChildContent>
                         <div class="renatus-profile-summary">
-                            <MudAvatar Color="Color.Secondary" Size="Size.Large">@Initials</MudAvatar>
+                            <MudAvatar Color="Color.Secondary" Size="Size.Large">
+                                @if (!string.IsNullOrWhiteSpace(_avatarBase64))
+                                {
+                                    <img src="@_avatarBase64" alt="" />
+                                }
+                                else
+                                {
+                                    @Initials
+                                }
+                            </MudAvatar>
                             <div class="renatus-profile-copy">
                                 <MudText Typo="Typo.subtitle1" Class="renatus-profile-name">@DisplayName</MudText>
                                 <MudText Typo="Typo.caption" Class="renatus-profile-role">@(_isAdmin ? L["site.administrator"] : L["site.member"])</MudText>
@@ -63,6 +101,7 @@
                             </div>
                         </div>
                         <MudDivider Class="renatus-profile-divider" />
+                        <MudMenuItem Href="/account" Icon="@Icons.Material.Filled.ManageAccounts">@L["account.settings"]</MudMenuItem>
                         @if (_isAdmin)
                         {
                             <MudMenuItem Href="/admin" Icon="@Icons.Material.Filled.AdminPanelSettings">@L["site.adminPanel"]</MudMenuItem>
@@ -106,6 +145,7 @@
     private bool _usesContainedContent;
     private string? _userName;
     private string? _nickname;
+    private string? _avatarBase64;
     private bool _isAdmin;
 
     [CascadingParameter]
@@ -113,6 +153,9 @@
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
+
+    [Inject]
+    private AuthService AuthService { get; set; } = default!;
 
     private readonly MudTheme _theme = new()
     {
@@ -144,6 +187,20 @@
             _userName = state.User.Identity?.Name;
             _nickname = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
             _isAdmin = state.User.IsInRole(nameof(UserRole.Admin));
+            if (Guid.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
+            {
+                try
+                {
+                    var profile = await AuthService.GetAccountProfileAsync(userId, CancellationToken.None);
+                    _userName = profile.Username;
+                    _nickname = profile.NickName;
+                    _avatarBase64 = profile.AvatarBase64;
+                }
+                catch (AuthException)
+                {
+                    // Claims remain a usable fallback if the profile cannot be loaded.
+                }
+            }
             UpdateRouteState();
         }
     }

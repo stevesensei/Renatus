@@ -1,0 +1,297 @@
+@page "/account"
+@attribute [Authorize]
+@implements IDisposable
+
+<PageTitle>@L["account.settings"] · @L["site.name"]</PageTitle>
+
+<MudStack Spacing="4" Class="renatus-account-page">
+    <section class="renatus-page-hero" aria-labelledby="account-title">
+        <div>
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["account.eyebrow"]</MudText>
+            <MudText Typo="Typo.h3" id="account-title">@L["account.settings"]</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@L["account.description"]</MudText>
+        </div>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Variant="Variant.Outlined" Color="Color.Primary" Href="/">
+            @L["nav.home"]
+        </MudButton>
+    </section>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="renatus-panel renatus-loading-card" Elevation="0">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                <MudText Color="Color.Secondary">@L["account.loading"]</MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Error" aria-live="polite">@_loadError</MudAlert>
+    }
+    else
+    {
+        <div class="account-settings-layout">
+            <MudPaper Class="renatus-panel account-profile-panel" Elevation="0" aria-labelledby="profile-heading">
+                <div class="account-panel-heading">
+                    <div>
+                        <MudText Typo="Typo.h5" id="profile-heading">@L["account.profile"]</MudText>
+                        <MudText Typo="Typo.body2" Class="renatus-muted">@L["account.profileDescription"]</MudText>
+                    </div>
+                </div>
+
+                <div class="account-avatar-editor">
+                    <MudAvatar Color="Color.Secondary" Size="Size.Large" Class="account-avatar-preview">
+                        @if (!string.IsNullOrWhiteSpace(_avatarBase64))
+                        {
+                            <img src="@_avatarBase64" alt="@L["account.avatar"]" />
+                        }
+                        else
+                        {
+                            @Initials
+                        }
+                    </MudAvatar>
+                    <div class="account-avatar-actions">
+                        <label class="account-file-picker" for="account-avatar-file">
+                            <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" />
+                            <span>@L["account.chooseAvatar"]</span>
+                            <InputFile id="account-avatar-file" class="account-file-input" style="display: none;" OnChange="HandleAvatarSelected" accept="image/png,image/jpeg,image/webp" />
+                        </label>
+                        @if (_avatarBase64 is not null)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.DeleteOutline" OnClick="ClearAvatar">
+                                @L["account.clearAvatar"]
+                            </MudButton>
+                        }
+                        <MudText Typo="Typo.caption" Class="renatus-muted">@L["account.avatarHint"]</MudText>
+                    </div>
+                </div>
+
+                @if (_avatarError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="account-inline-alert" aria-live="polite">@_avatarError</MudAlert>
+                }
+
+                <div class="account-form-grid">
+                    <MudTextField @bind-Value="_username" Label='@L["site.username"]' ReadOnly="true" HelperText='@L["account.usernameHint"]' />
+                    <MudTextField @bind-Value="_nickname" Label='@L["site.nickname"]' Required="true" MaxLength="64" />
+                    <MudTextField @bind-Value="_email" Label='@L["site.email"]' InputType="InputType.Email" Required="true" MaxLength="256" Class="account-form-span-2" />
+                </div>
+
+                @if (_profileError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Class="account-inline-alert" aria-live="polite">@_profileError</MudAlert>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Class="account-actions">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveProfileAsync" Disabled="@_isSavingProfile">
+                        @if (_isSavingProfile)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Inherit" />
+                        }
+                        else
+                        {
+                            @L["account.saveProfile"]
+                        }
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Class="renatus-panel account-password-panel" Elevation="0" aria-labelledby="password-heading">
+                <div class="account-panel-heading">
+                    <div>
+                        <MudText Typo="Typo.h5" id="password-heading">@L["account.password"]</MudText>
+                        <MudText Typo="Typo.body2" Class="renatus-muted">@L["account.passwordDescription"]</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Secondary" />
+                </div>
+
+                <MudStack Spacing="3">
+                    <MudTextField @bind-Value="_currentPassword" Label='@L["account.currentPassword"]' InputType="InputType.Password" Required="true" />
+                    <MudTextField @bind-Value="_newPassword" Label='@L["account.newPassword"]' InputType="InputType.Password" Required="true" HelperText='@L["account.passwordHint"]' />
+                    <MudTextField @bind-Value="_confirmPassword" Label='@L["account.confirmPassword"]' InputType="InputType.Password" Required="true" />
+                </MudStack>
+
+                @if (_passwordError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Class="account-inline-alert" aria-live="polite">@_passwordError</MudAlert>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Class="account-actions">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Key" OnClick="ChangePasswordAsync" Disabled="@_isChangingPassword">
+                        @if (_isChangingPassword)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else
+                        {
+                            @L["account.changePassword"]
+                        }
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </div>
+    }
+</MudStack>
+
+@code {
+    private const long MaxAvatarFileSize = 1_500_000;
+    private readonly CancellationTokenSource _cancellation = new();
+    private bool _isLoading = true;
+    private bool _isSavingProfile;
+    private bool _isChangingPassword;
+    private string? _loadError;
+    private string? _profileError;
+    private string? _passwordError;
+    private string? _avatarError;
+    private string _username = string.Empty;
+    private string _nickname = string.Empty;
+    private string _email = string.Empty;
+    private string? _avatarBase64;
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+
+    [Inject] private FrontendUserContext UserContext { get; set; } = default!;
+    [Inject] private AuthService AuthService { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private string DisplayName => string.IsNullOrWhiteSpace(_nickname) ? _username : _nickname;
+
+    private string Initials => string.Join(
+        string.Empty,
+        DisplayName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Take(2)
+            .Select(part => part[0]))
+        .ToUpperInvariant();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var profile = await AuthService.GetAccountProfileAsync(await UserContext.GetUserIdAsync(), _cancellation.Token);
+            _username = profile.Username;
+            _nickname = profile.NickName;
+            _email = profile.Email;
+            _avatarBase64 = profile.AvatarBase64;
+        }
+        catch (AuthException exception)
+        {
+            _loadError = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleAvatarSelected(InputFileChangeEventArgs args)
+    {
+        _avatarError = null;
+        var file = args.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxAvatarFileSize);
+            await using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, _cancellation.Token);
+            _avatarBase64 = $"data:{file.ContentType};base64,{Convert.ToBase64String(memory.ToArray())}";
+        }
+        catch (IOException)
+        {
+            _avatarError = L["account.avatarTooLarge"];
+        }
+        catch (InvalidOperationException)
+        {
+            _avatarError = L["account.invalidAvatar"];
+        }
+    }
+
+    private void ClearAvatar()
+    {
+        _avatarBase64 = null;
+        _avatarError = null;
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        _profileError = null;
+        if (string.IsNullOrWhiteSpace(_nickname) || string.IsNullOrWhiteSpace(_email))
+        {
+            _profileError = L["account.profileRequired"];
+            return;
+        }
+
+        _isSavingProfile = true;
+        try
+        {
+            var profile = await AuthService.UpdateAccountProfileAsync(
+                await UserContext.GetUserIdAsync(),
+                new UpdateAccountProfileRequest(_nickname, _email, _avatarBase64),
+                _cancellation.Token);
+            _username = profile.Username;
+            _nickname = profile.NickName;
+            _email = profile.Email;
+            _avatarBase64 = profile.AvatarBase64;
+            Snackbar.Add(L["account.profileSaved"], Severity.Success);
+            Navigation.NavigateTo("/account", forceLoad: true);
+        }
+        catch (AuthException exception)
+        {
+            _profileError = exception.Message;
+        }
+        finally
+        {
+            _isSavingProfile = false;
+        }
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _passwordError = null;
+        if (string.IsNullOrWhiteSpace(_currentPassword) || string.IsNullOrWhiteSpace(_newPassword))
+        {
+            _passwordError = L["account.passwordRequired"];
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordError = L["account.passwordMismatch"];
+            return;
+        }
+
+        _isChangingPassword = true;
+        try
+        {
+            await AuthService.ChangePasswordAsync(
+                await UserContext.GetUserIdAsync(),
+                new ChangePasswordRequest(_currentPassword, _newPassword),
+                _cancellation.Token);
+            _currentPassword = string.Empty;
+            _newPassword = string.Empty;
+            _confirmPassword = string.Empty;
+            Snackbar.Add(L["account.passwordChanged"], Severity.Success);
+        }
+        catch (AuthException exception)
+        {
+            _passwordError = exception.Message;
+        }
+        finally
+        {
+            _isChangingPassword = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+}

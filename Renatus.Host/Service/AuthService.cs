@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -124,6 +125,93 @@ public sealed partial class AuthService(
         return ToUserDto(user);
     }
 
+    public async Task<AccountProfileDto> GetAccountProfileAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null || user.IsDisabled)
+        {
+            throw new AuthException(StatusCodes.Status401Unauthorized, "User is unavailable.");
+        }
+
+        return ToAccountProfileDto(user);
+    }
+
+    public async Task<AccountProfileDto> UpdateAccountProfileAsync(
+        Guid userId,
+        UpdateAccountProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var nickname = request.NickName.Trim();
+        var email = request.Email.Trim();
+        if (string.IsNullOrWhiteSpace(nickname) || nickname.Length > 64)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Nickname must be between 1 and 64 characters.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email) || email.Length > 256)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "A valid email address is required.");
+        }
+
+        var normalizedEmail = YggdrasilFormat.Normalize(email);
+        var avatarBase64 = NormalizeAvatarBase64(request.AvatarBase64);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users.FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null || user.IsDisabled)
+        {
+            throw new AuthException(StatusCodes.Status401Unauthorized, "User is unavailable.");
+        }
+
+        var emailInUse = await dbContext.Users.AnyAsync(
+            entity => entity.Id != userId && entity.NormalizedEmail == normalizedEmail,
+            cancellationToken);
+        if (emailInUse)
+        {
+            throw new AuthException(StatusCodes.Status409Conflict, "Email is already in use.");
+        }
+
+        user.NickName = nickname;
+        user.Email = email;
+        user.NormalizedEmail = normalizedEmail;
+        user.AvatarBase64 = avatarBase64;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return ToAccountProfileDto(user);
+    }
+
+    public async Task ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        EnsurePasswordAllowed(request.CurrentPassword);
+        EnsurePasswordAllowed(request.NewPassword);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users
+            .Include(entity => entity.AuthenticationMethods)
+            .FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null || user.IsDisabled || !VerifyPassword(user, request.CurrentPassword))
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Current password is invalid.");
+        }
+
+        var passwordMethod = user.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
+        if (passwordMethod is null)
+        {
+            passwordMethod = new UserAuthenticationMethod
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Type = AuthenticationMethodType.Password
+            };
+            dbContext.UserAuthenticationMethods.Add(passwordMethod);
+        }
+
+        passwordMethod.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<string> ConsumeEncryptedPasswordAsync(
         Guid sessionKeyId,
         string encryptedPassword,
@@ -234,6 +322,51 @@ public sealed partial class AuthService(
     private static AuthUserDto ToUserDto(User user)
     {
         return new AuthUserDto(user.Id, user.UserName, user.NickName, user.Email, user.Role);
+    }
+
+    private static AccountProfileDto ToAccountProfileDto(User user)
+    {
+        return new AccountProfileDto(user.Id, user.UserName, user.NickName, user.Email, user.AvatarBase64, user.Role);
+    }
+
+    private static string? NormalizeAvatarBase64(string? avatarBase64)
+    {
+        if (string.IsNullOrWhiteSpace(avatarBase64))
+        {
+            return null;
+        }
+
+        var value = avatarBase64.Trim();
+        var validPrefix = value.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase);
+        if (!validPrefix)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Avatar must be a PNG, JPEG, or WebP data URL.");
+        }
+
+        var separatorIndex = value.IndexOf(",", StringComparison.Ordinal);
+        if (separatorIndex < 0)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Avatar data is invalid.");
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(value[(separatorIndex + 1)..]);
+        }
+        catch (FormatException)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Avatar data is invalid.");
+        }
+
+        if (bytes.Length > 1_500_000)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Avatar must be smaller than 1.5 MB.");
+        }
+
+        return value;
     }
 
     private static void EnsurePasswordAllowed(string password)

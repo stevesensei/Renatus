@@ -8,6 +8,7 @@ public sealed class User
     public string NickName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string NormalizedEmail { get; set; } = string.Empty;
+    public string? AvatarBase64 { get; set; }
     public string PreferredLanguage { get; set; } = "zh_CN";
     public UserRole Role { get; set; } = UserRole.Player;
     public int MaxPlayerCount { get; set; } = 3;

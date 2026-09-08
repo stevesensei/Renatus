@@ -29,6 +29,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(user => user.NickName).HasMaxLength(64).IsRequired();
             entity.Property(user => user.Email).HasMaxLength(256).IsRequired();
             entity.Property(user => user.NormalizedEmail).HasMaxLength(256).IsRequired();
+            entity.Property(user => user.AvatarBase64).HasColumnType("text");
             entity.Property(user => user.PreferredLanguage).HasMaxLength(16).IsRequired();
             entity.Property(user => user.Role)
                 .HasConversion<string>()

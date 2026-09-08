@@ -48,9 +48,138 @@
     background: var(--renatus-page);
 }
 
+.renatus-admin-category-menu {
+    margin-inline-start: 4px;
+}
+
+.renatus-admin-category-button {
+    font-weight: 700;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.renatus-admin-category-popover {
+    width: min(248px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+}
+
+.renatus-admin-category-popover .mud-menu-item {
+    min-height: 48px;
+    padding-inline: 16px;
+}
+
+.admin-form-panel {
+    padding: 24px;
+}
+
+.admin-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.admin-form-span-2 {
+    grid-column: span 2;
+}
+
+.admin-button-editor-list {
+    display: grid;
+    gap: 24px;
+}
+
+.admin-button-editor {
+    display: grid;
+    gap: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--renatus-border);
+}
+
+.admin-button-editor:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.admin-form-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.admin-markdown-editor {
+    display: grid;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.admin-markdown-editor-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.admin-markdown-editor-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+}
+
+.admin-markdown-input,
+.admin-markdown-preview {
+    min-width: 0;
+}
+
+.admin-markdown-preview {
+    min-height: 304px;
+    padding: 16px;
+    border: 1px solid var(--renatus-border);
+    border-radius: 8px;
+    background: var(--renatus-page);
+}
+
+.admin-markdown-empty {
+    display: block;
+    padding-top: 24px;
+}
+
 @media (max-width: 720px) {
     .admin-filter-grid,
-    .admin-detail-grid {
+    .admin-detail-grid,
+    .admin-form-grid,
+    .admin-markdown-editor-grid {
         grid-template-columns: 1fr;
+    }
+
+    .admin-form-panel {
+        padding: 16px;
+    }
+
+    .admin-form-span-2 {
+        grid-column: auto;
+    }
+
+    .admin-markdown-preview {
+        min-height: 180px;
+    }
+
+    .renatus-admin-category-menu {
+        margin-inline-start: 0;
+    }
+
+    .renatus-admin-category-button {
+        flex: 0 0 40px;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        padding: 0 !important;
+    }
+
+    .renatus-admin-category-button .renatus-button-text,
+    .renatus-admin-category-button .mud-button-end-icon {
+        display: none;
+    }
+
+    .renatus-admin-category-button .mud-icon-root {
+        margin: 0 !important;
     }
 }
