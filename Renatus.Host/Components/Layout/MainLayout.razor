@@ -10,19 +10,30 @@
 
 <MudLayout Class="@LayoutClass">
     <MudAppBar Elevation="0" Dense="false" Fixed="true" Class="@AppBarClass">
-        <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-brand-button" title='@L["site.name"]' aria-label='@L["site.name"]'>
-            @L["site.name"]
+        <MudButton Href="@(_isAdminPanel ? "/admin" : "/")" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-brand-button" title='@(_isAdminPanel ? L["site.adminPanel"] : L["site.name"])' aria-label='@(_isAdminPanel ? L["site.adminPanel"] : L["site.name"])'>
+            @(_isAdminPanel ? L["site.adminPanel"] : L["site.name"])
         </MudButton>
         <MudSpacer />
-        <nav class="renatus-top-nav" aria-label="Primary">
-            <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Home" title='@L["nav.home"]' aria-label='@L["nav.home"]'><span class="renatus-button-text">@L["nav.home"]</span></MudButton>
-            <AuthorizeView>
-                <Authorized>
-                    <MudButton Href="/dashboard" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Dashboard" title='@L["nav.dashboard"]' aria-label='@L["nav.dashboard"]'><span class="renatus-button-text">@L["nav.dashboard"]</span></MudButton>
-                    <MudButton Href="/players" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.People" title='@L["nav.players"]' aria-label='@L["nav.players"]'><span class="renatus-button-text">@L["nav.players"]</span></MudButton>
-                    <MudButton Href="/textures" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Palette" title='@L["nav.textures"]' aria-label='@L["nav.textures"]'><span class="renatus-button-text">@L["nav.textures"]</span></MudButton>
-                </Authorized>
-            </AuthorizeView>
+        <nav class="renatus-top-nav" aria-label='@(_isAdminPanel ? L["nav.admin"] : L["nav.primary"])'>
+            @if (_isAdminPanel)
+            {
+                <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Home" title='@L["nav.home"]' aria-label='@L["nav.home"]'><span class="renatus-button-text">@L["nav.home"]</span></MudButton>
+                <MudButton Href="/admin" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Dashboard" title='@L["admin.overview"]' aria-label='@L["admin.overview"]'><span class="renatus-button-text">@L["admin.overview"]</span></MudButton>
+                <MudButton Href="/admin/users" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.ManageAccounts" title='@L["admin.users"]' aria-label='@L["admin.users"]'><span class="renatus-button-text">@L["admin.users"]</span></MudButton>
+                <MudButton Href="/admin/players" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.People" title='@L["admin.players"]' aria-label='@L["admin.players"]'><span class="renatus-button-text">@L["admin.players"]</span></MudButton>
+                <MudButton Href="/admin/textures" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Palette" title='@L["admin.textures"]' aria-label='@L["admin.textures"]'><span class="renatus-button-text">@L["admin.textures"]</span></MudButton>
+            }
+            else
+            {
+                <MudButton Href="/" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Home" title='@L["nav.home"]' aria-label='@L["nav.home"]'><span class="renatus-button-text">@L["nav.home"]</span></MudButton>
+                <AuthorizeView>
+                    <Authorized>
+                        <MudButton Href="/dashboard" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Dashboard" title='@L["nav.dashboard"]' aria-label='@L["nav.dashboard"]'><span class="renatus-button-text">@L["nav.dashboard"]</span></MudButton>
+                        <MudButton Href="/players" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.People" title='@L["nav.players"]' aria-label='@L["nav.players"]'><span class="renatus-button-text">@L["nav.players"]</span></MudButton>
+                        <MudButton Href="/textures" Color="Color.Inherit" Variant="Variant.Text" Class="renatus-nav-button" StartIcon="@Icons.Material.Filled.Palette" title='@L["nav.textures"]' aria-label='@L["nav.textures"]'><span class="renatus-button-text">@L["nav.textures"]</span></MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            }
         </nav>
         <AuthorizeView>
             <Authorized>
@@ -91,6 +102,7 @@
     private bool _isDarkMode;
     private bool _isLoginPage;
     private bool _isHomePage = true;
+    private bool _isAdminPanel;
     private bool _usesContainedContent;
     private string? _userName;
     private string? _nickname;
@@ -132,6 +144,7 @@
             _userName = state.User.Identity?.Name;
             _nickname = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
             _isAdmin = state.User.IsInRole(nameof(UserRole.Admin));
+            UpdateRouteState();
         }
     }
 
@@ -174,6 +187,7 @@
         var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
         _isLoginPage = path.Equals("/login", StringComparison.OrdinalIgnoreCase);
         _isHomePage = path.Equals("/", StringComparison.OrdinalIgnoreCase);
+        _isAdminPanel = _isAdmin && path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase);
         _usesContainedContent = !_isLoginPage && !_isHomePage;
     }
 

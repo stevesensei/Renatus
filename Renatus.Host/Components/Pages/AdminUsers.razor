@@ -1,0 +1,193 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
+
+<PageTitle>@L["admin.users"] · @L["site.name"]</PageTitle>
+
+<MudStack Spacing="4" Class="renatus-admin-page">
+    <section class="renatus-page-hero" aria-labelledby="admin-users-title">
+        <div><MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["admin.eyebrow"]</MudText><MudText Typo="Typo.h3" id="admin-users-title">@L["admin.users"]</MudText><MudText Typo="Typo.body1" Class="renatus-muted">@L["admin.usersDescription"]</MudText></div>
+        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshAsync" Disabled="@_loading">@L["admin.refresh"]</MudButton>
+    </section>
+
+    <MudPaper Class="renatus-panel" Elevation="0">
+        <div class="admin-filter-grid">
+            <MudTextField @bind-Value="_search" Label='@L["admin.searchUsers"]' Clearable="true" />
+            <MudSelect T="UserRole?" @bind-Value="_role" Label='@L["admin.role"]'><MudSelectItem T="UserRole?" Value="@((UserRole?)null)">@L["admin.allRoles"]</MudSelectItem><MudSelectItem T="UserRole?" Value="UserRole.Player">@L["admin.playerRole"]</MudSelectItem><MudSelectItem T="UserRole?" Value="UserRole.Admin">@L["admin.adminRole"]</MudSelectItem></MudSelect>
+            <MudSelect T="bool?" @bind-Value="_disabled" Label='@L["admin.status"]'><MudSelectItem T="bool?" Value="@((bool?)null)">@L["admin.allStatuses"]</MudSelectItem><MudSelectItem T="bool?" Value="false">@L["admin.active"]</MudSelectItem><MudSelectItem T="bool?" Value="true">@L["admin.disabled"]</MudSelectItem></MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">@L["admin.search"]</MudButton>
+        </div>
+    </MudPaper>
+
+    @if (_errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" aria-live="assertive">@_errorMessage</MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudPaper Class="renatus-panel renatus-loading-card" Elevation="0"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /><MudText Class="renatus-muted">@L["admin.loading"]</MudText></MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="renatus-panel admin-table-panel" Elevation="0">
+            <MudTable Items="@(_response?.Items ?? [])" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
+                <HeaderContent><MudTh>@L["admin.user"]</MudTh><MudTh>@L["site.email"]</MudTh><MudTh>@L["admin.role"]</MudTh><MudTh>@L["admin.status"]</MudTh><MudTh>@L["admin.actions"]</MudTh></HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel='@L["admin.user"]'><strong>@context.NickName</strong><br /><span class="renatus-muted">@context.UserName</span></MudTd>
+                    <MudTd DataLabel='@L["site.email"]'>@context.Email</MudTd>
+                    <MudTd DataLabel='@L["admin.role"]'>@RoleLabel(context.Role)</MudTd>
+                    <MudTd DataLabel='@L["admin.status"]'>@StatusLabel(context.IsDisabled)</MudTd>
+                    <MudTd DataLabel='@L["admin.actions"]'>
+                        <div class="admin-row-actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" aria-label='@L["admin.details"]' OnClick="@(() => OpenDetailsAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" aria-label='@L["admin.edit"]' OnClick="@(() => EditAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Password" Color="Color.Secondary" aria-label='@L["admin.resetPassword"]' OnClick="@(() => ResetPasswordAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Warning" aria-label='@L["admin.revokeSessions"]' OnClick="@(() => RevokeSessionsAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label='@L["admin.delete"]' OnClick="@(() => DeleteAsync(context))" />
+                        </div>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent><MudText Class="renatus-muted">@L["admin.noUsers"]</MudText></NoRecordsContent>
+            </MudTable>
+            <div class="admin-pagination"><MudButton Variant="Variant.Outlined" Disabled="@(_response is null || _response.Page <= 1 || _loading)" OnClick="@(() => LoadAsync(_response!.Page - 1))">@L["admin.previous"]</MudButton><span>@PageLabel</span><MudButton Variant="Variant.Outlined" Disabled="@(_response is null || _response.Page >= _response.TotalPages || _loading)" OnClick="@(() => LoadAsync(_response!.Page + 1))">@L["admin.next"]</MudButton></div>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private const int PageSize = 20;
+    private readonly CancellationTokenSource _cancellation = new();
+    private AdminPageDto<AdminUserListItemDto>? _response;
+    private string _search = string.Empty;
+    private UserRole? _role;
+    private bool? _disabled;
+    private bool _loading = true;
+    private string? _errorMessage;
+
+    [Inject] private AuthService AuthService { get; set; } = default!;
+    [Inject] private YggdrasilService YggdrasilService { get; set; } = default!;
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private string PageLabel => _response is null || _response.TotalPages == 0 ? "1 / 1" : $"{_response.Page} / {_response.TotalPages}";
+
+    protected override Task OnInitializedAsync() => LoadAsync(1);
+
+    private Task SearchAsync() => LoadAsync(1);
+    private Task RefreshAsync() => LoadAsync(_response?.Page ?? 1);
+
+    private async Task LoadAsync(int page = 1)
+    {
+        _loading = true;
+        _errorMessage = null;
+        try
+        {
+            _response = await AuthService.ListUsersAsync(page, PageSize, _search, _role, _disabled, _cancellation.Token);
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["admin.loadError"] : exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenDetailsAsync(AdminUserListItemDto user)
+    {
+        try
+        {
+            var detail = await AuthService.GetUserDetailAsync(user.Id, _cancellation.Token);
+            await DialogService.ShowAsync<AdminUserDetailDialog>(user.NickName, new DialogParameters { ["User"] = detail }, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task EditAsync(AdminUserListItemDto user)
+    {
+        var dialog = await DialogService.ShowAsync<AdminUserEditDialog>(L["admin.editUser"], new DialogParameters { ["User"] = user }, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not AdminUserEditDialog.AdminUserEditResult edit)
+        {
+            return;
+        }
+
+        try
+        {
+            await AuthService.UpdateUserAsync(user.Id, new AdminUpdateUserRequest(edit.NickName, edit.Email, edit.PreferredLanguage, edit.Role, edit.MaxPlayerCount, edit.IsDisabled), _cancellation.Token);
+            Snackbar.Add(L["admin.saved"], Severity.Success);
+            await LoadAsync(_response?.Page ?? 1);
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task ResetPasswordAsync(AdminUserListItemDto user)
+    {
+        var dialog = await DialogService.ShowAsync<AdminPasswordDialog>(L["admin.resetPassword"], options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not string password)
+        {
+            return;
+        }
+
+        try
+        {
+            await AuthService.ResetPasswordAsync(user.Id, password, _cancellation.Token);
+            Snackbar.Add(L["admin.passwordReset"], Severity.Success);
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task RevokeSessionsAsync(AdminUserListItemDto user)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(L["admin.revokeSessions"], L["admin.revokePrompt"], yesText: L["admin.confirm"], cancelText: L["players.cancel"], options: new DialogOptions { CloseOnEscapeKey = true });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await YggdrasilService.RevokeAllUserSessionsAsync(user.Id, _cancellation.Token);
+            Snackbar.Add(L["admin.sessionsRevoked"], Severity.Success);
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task DeleteAsync(AdminUserListItemDto user)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(L["admin.deleteUser"], L["admin.deleteUserPrompt"], yesText: L["admin.delete"], cancelText: L["players.cancel"], options: new DialogOptions { CloseOnEscapeKey = true });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await AuthService.DeleteUserAsync(user.Id, _cancellation.Token);
+            Snackbar.Add(L["admin.deleted"], Severity.Success);
+            await LoadAsync(_response?.Page ?? 1);
+        }
+        catch (AuthException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private string RoleLabel(UserRole role) => role == UserRole.Admin ? L["admin.adminRole"] : L["admin.playerRole"];
+    private string StatusLabel(bool disabled) => disabled ? L["admin.disabled"] : L["admin.active"];
+    public void Dispose() => _cancellation.Cancel();
+}

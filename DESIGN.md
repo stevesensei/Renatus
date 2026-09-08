@@ -75,6 +75,11 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 - **Tokens**: transparent canvas, surface `--renatus-surface`, quiet border `--renatus-border`, electric accent `--renatus-skin-accent`, and canvas glow `--renatus-skin-glow`.
 - **Accessibility**: canvas has a descriptive label; every icon button has an accessible name; animation controls expose `aria-pressed`; all essential metadata is text, not color-only.
 
+### Admin shell and management pages
+- **Structure**: the authenticated app bar switches to an admin-only navigation set with Home, Overview, Users, Players, and Textures actions. Management pages keep the same top hero card as player management, followed by metric, filter, table, detail, and confirmation surfaces.
+- **States**: admin overview loading/error/ready, paginated list loading/empty/error, detail/edit dialog, mutation busy/success/error, and destructive confirmation.
+- **Accessibility**: admin routes require the Admin role; each management action has an accessible name, table values remain readable without color, and destructive actions require explicit confirmation.
+
 ### Texture library card grid
 - **Structure**: bounded page hero, small stat strip, responsive three-column card grid, and a compact pagination footer.
 - **States**: loading, empty, error, public cards, and disabled previous/next page controls.

@@ -1,0 +1,143 @@
+@page "/admin/textures"
+@attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
+
+<PageTitle>@L["admin.textures"] · @L["site.name"]</PageTitle>
+
+<MudStack Spacing="4" Class="renatus-admin-page">
+    <section class="renatus-page-hero" aria-labelledby="admin-textures-title">
+        <div><MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["admin.eyebrow"]</MudText><MudText Typo="Typo.h3" id="admin-textures-title">@L["admin.textures"]</MudText><MudText Typo="Typo.body1" Class="renatus-muted">@L["admin.texturesDescription"]</MudText></div>
+        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshAsync" Disabled="@_loading">@L["admin.refresh"]</MudButton>
+    </section>
+
+    <MudPaper Class="renatus-panel" Elevation="0">
+        <div class="admin-filter-grid">
+            <MudTextField @bind-Value="_sha256" Label='@L["admin.sha256"]' Clearable="true" />
+            <MudTextField @bind-Value="_uploaderId" Label='@L["admin.uploaderId"]' Clearable="true" />
+            <MudSelect T="TextureType?" @bind-Value="_type" Label='@L["textures.type"]'><MudSelectItem T="TextureType?" Value="@((TextureType?)null)">@L["admin.allTypes"]</MudSelectItem><MudSelectItem T="TextureType?" Value="TextureType.Skin">@L["textures.skin"]</MudSelectItem><MudSelectItem T="TextureType?" Value="TextureType.Cape">@L["textures.cape"]</MudSelectItem></MudSelect>
+            <MudSelect T="bool?" @bind-Value="_isPublic" Label='@L["admin.status"]'><MudSelectItem T="bool?" Value="@((bool?)null)">@L["admin.allStatuses"]</MudSelectItem><MudSelectItem T="bool?" Value="true">@L["textures.publicStatus"]</MudSelectItem><MudSelectItem T="bool?" Value="false">@L["textures.privateStatus"]</MudSelectItem></MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">@L["admin.search"]</MudButton>
+        </div>
+    </MudPaper>
+
+    @if (_errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" aria-live="assertive">@_errorMessage</MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudPaper Class="renatus-panel renatus-loading-card" Elevation="0"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /><MudText Class="renatus-muted">@L["admin.loading"]</MudText></MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="renatus-panel admin-table-panel" Elevation="0">
+            <MudTable Items="@(_response?.Items ?? [])" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
+                <HeaderContent><MudTh>@L["textures.textureName"]</MudTh><MudTh>@L["textures.type"]</MudTh><MudTh>@L["textures.source"]</MudTh><MudTh>@L["admin.owner"]</MudTh><MudTh>@L["admin.status"]</MudTh><MudTh>@L["admin.actions"]</MudTh></HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel='@L["textures.textureName"]'><strong>@context.Name</strong><br /><span class="renatus-muted">@context.Width × @context.Height</span></MudTd>
+                    <MudTd DataLabel='@L["textures.type"]'>@TypeLabel(context.Type)</MudTd>
+                    <MudTd DataLabel='@L["textures.source"]'>@SourceLabel(context.Source)</MudTd>
+                    <MudTd DataLabel='@L["admin.owner"]'>@context.UploaderName</MudTd>
+                    <MudTd DataLabel='@L["admin.status"]'>@(context.IsPublic ? L["textures.publicStatus"] : L["textures.privateStatus"])</MudTd>
+                    <MudTd DataLabel='@L["admin.actions"]'><div class="admin-row-actions"><MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" aria-label='@L["admin.edit"]' OnClick="@(() => EditAsync(context))" /><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label='@L["admin.delete"]' OnClick="@(() => DeleteAsync(context))" /></div></MudTd>
+                </RowTemplate>
+                <NoRecordsContent><MudText Class="renatus-muted">@L["admin.noTextures"]</MudText></NoRecordsContent>
+            </MudTable>
+            <div class="admin-pagination"><MudButton Variant="Variant.Outlined" Disabled="@(_response is null || _response.Page <= 1 || _loading)" OnClick="@(() => LoadAsync(_response!.Page - 1))">@L["admin.previous"]</MudButton><span>@PageLabel</span><MudButton Variant="Variant.Outlined" Disabled="@(_response is null || _response.Page >= _response.TotalPages || _loading)" OnClick="@(() => LoadAsync(_response!.Page + 1))">@L["admin.next"]</MudButton></div>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private const int PageSize = 20;
+    private readonly CancellationTokenSource _cancellation = new();
+    private AdminPageDto<AdminTextureListItemDto>? _response;
+    private string _sha256 = string.Empty;
+    private string _uploaderId = string.Empty;
+    private TextureType? _type;
+    private bool? _isPublic;
+    private bool _loading = true;
+    private string? _errorMessage;
+
+    [Inject] private TextureService TextureService { get; set; } = default!;
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private Guid? UploaderId => Guid.TryParse(_uploaderId.Trim(), out var id) ? id : null;
+    private string PageLabel => _response is null || _response.TotalPages == 0 ? "1 / 1" : $"{_response.Page} / {_response.TotalPages}";
+
+    protected override Task OnInitializedAsync() => LoadAsync(1);
+    private Task SearchAsync() => LoadAsync(1);
+    private Task RefreshAsync() => LoadAsync(_response?.Page ?? 1);
+
+    private async Task LoadAsync(int page = 1)
+    {
+        _loading = true;
+        _errorMessage = null;
+        if (!string.IsNullOrWhiteSpace(_uploaderId) && UploaderId is null)
+        {
+            _errorMessage = L["admin.invalidUploaderId"];
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _response = await TextureService.ListTexturesAsync(page, PageSize, _isPublic, _type, UploaderId, null, _sha256, _cancellation.Token);
+        }
+        catch (TextureException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["admin.loadError"] : exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task EditAsync(AdminTextureListItemDto texture)
+    {
+        try
+        {
+            var detail = await TextureService.GetTextureDetailAsync(texture.Id, _cancellation.Token);
+            var dialog = await DialogService.ShowAsync<AdminTextureEditDialog>(L["admin.editTexture"], new DialogParameters { ["Texture"] = detail }, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+            var result = await dialog.Result;
+            if (result is null || result.Canceled || result.Data is not AdminTextureEditDialog.AdminTextureEditResult edit)
+            {
+                return;
+            }
+
+            await TextureService.UpdateTextureAsync(texture.Id, new AdminUpdateTextureRequest(edit.Name, edit.DescriptionMarkdown, edit.IsPublic, edit.Source, edit.SkinModel), _cancellation.Token);
+            Snackbar.Add(L["admin.saved"], Severity.Success);
+            await LoadAsync(_response?.Page ?? 1);
+        }
+        catch (TextureException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private async Task DeleteAsync(AdminTextureListItemDto texture)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(L["admin.deleteTexture"], L["admin.deleteTexturePrompt"], yesText: L["admin.delete"], cancelText: L["players.cancel"], options: new DialogOptions { CloseOnEscapeKey = true });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await TextureService.DeleteTextureAdminAsync(texture.Id, _cancellation.Token);
+            Snackbar.Add(L["admin.deleted"], Severity.Success);
+            await LoadAsync(_response?.Page ?? 1);
+        }
+        catch (TextureException exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private string TypeLabel(TextureType type) => type == TextureType.Cape ? L["textures.cape"] : L["textures.skin"];
+    private string SourceLabel(TextureSource source) => source == TextureSource.Repost ? L["textures.repost"] : L["textures.original"];
+    public void Dispose() => _cancellation.Cancel();
+}

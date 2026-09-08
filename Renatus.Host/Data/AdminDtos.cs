@@ -130,23 +130,23 @@ public sealed record AdminOverviewDto(
     [property: JsonPropertyName("recentActivities")] IReadOnlyCollection<AdminRecentActivityDto> RecentActivities);
 
 public sealed record AdminUpdateUserRequest(
+    [param: MaxLength(64)]
     [property: JsonPropertyName("nickName")]
-    [property: MaxLength(64)]
     string? NickName,
 
+    [param: MaxLength(256)]
     [property: JsonPropertyName("email")]
-    [property: MaxLength(256)]
     string? Email,
 
+    [param: MaxLength(16)]
     [property: JsonPropertyName("preferredLanguage")]
-    [property: MaxLength(16)]
     string? PreferredLanguage,
 
     [property: JsonPropertyName("role")]
     UserRole? Role,
 
+    [param: Range(0, 100)]
     [property: JsonPropertyName("maxPlayerCount")]
-    [property: Range(0, 100)]
     int? MaxPlayerCount,
 
     [property: JsonPropertyName("isDisabled")]
@@ -158,8 +158,8 @@ public sealed record AdminResetPasswordRequest(
     string NewPassword);
 
 public sealed record AdminUpdatePlayerRequest(
+    [param: MaxLength(16)]
     [property: JsonPropertyName("name")]
-    [property: MaxLength(16)]
     string? Name,
 
     [property: JsonPropertyName("skinModel")]
@@ -168,25 +168,25 @@ public sealed record AdminUpdatePlayerRequest(
     [property: JsonPropertyName("skinTextureId")]
     Guid? SkinTextureId,
 
-    [property: JsonPropertyName("clearSkinTexture")]
-    bool ClearSkinTexture,
-
     [property: JsonPropertyName("capeTextureId")]
     Guid? CapeTextureId,
 
-    [property: JsonPropertyName("clearCapeTexture")]
-    bool ClearCapeTexture,
-
     [property: JsonPropertyName("userId")]
-    Guid? UserId);
+    Guid? UserId,
+
+    [property: JsonPropertyName("clearSkinTexture")]
+    bool ClearSkinTexture = false,
+
+    [property: JsonPropertyName("clearCapeTexture")]
+    bool ClearCapeTexture = false);
 
 public sealed record AdminUpdateTextureRequest(
+    [param: MaxLength(80)]
     [property: JsonPropertyName("name")]
-    [property: MaxLength(80)]
     string? Name,
 
+    [param: MaxLength(4000)]
     [property: JsonPropertyName("descriptionMarkdown")]
-    [property: MaxLength(4000)]
     string? DescriptionMarkdown,
 
     [property: JsonPropertyName("isPublic")]

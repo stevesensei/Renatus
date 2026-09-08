@@ -1,0 +1,89 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
+
+<PageTitle>@L["admin.overview"] · @L["site.name"]</PageTitle>
+
+<MudStack Spacing="4" Class="renatus-admin-page">
+    <section class="renatus-page-hero" aria-labelledby="admin-title">
+        <div>
+            <MudText Typo="Typo.overline" Class="renatus-eyebrow">@L["admin.eyebrow"]</MudText>
+            <MudText Typo="Typo.h3" id="admin-title">@L["admin.overview"]</MudText>
+            <MudText Typo="Typo.body1" Class="renatus-muted">@L["admin.overviewDescription"]</MudText>
+        </div>
+        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadAsync" Disabled="@_loading">
+            @L["admin.refresh"]
+        </MudButton>
+    </section>
+
+    @if (_errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" aria-live="assertive">@_errorMessage</MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudPaper Class="renatus-panel renatus-loading-card" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            <MudText Class="renatus-muted">@L["admin.loading"]</MudText>
+        </MudPaper>
+    }
+    else if (_overview is not null)
+    {
+        <div class="renatus-metric-grid">
+            <MudPaper Class="renatus-metric-card" Elevation="0"><MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Primary" /><div><MudText Typo="Typo.caption" Class="renatus-muted">@L["admin.users"]</MudText><MudText Typo="Typo.h5">@_overview.TotalUsers</MudText></div></MudPaper>
+            <MudPaper Class="renatus-metric-card" Elevation="0"><MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Secondary" /><div><MudText Typo="Typo.caption" Class="renatus-muted">@L["admin.players"]</MudText><MudText Typo="Typo.h5">@_overview.TotalPlayers</MudText></div></MudPaper>
+            <MudPaper Class="renatus-metric-card" Elevation="0"><MudIcon Icon="@Icons.Material.Filled.Palette" Color="Color.Tertiary" /><div><MudText Typo="Typo.caption" Class="renatus-muted">@L["admin.textures"]</MudText><MudText Typo="Typo.h5">@_overview.TotalTextures</MudText></div></MudPaper>
+            <MudPaper Class="renatus-metric-card" Elevation="0"><MudIcon Icon="@Icons.Material.Filled.Devices" Color="Color.Primary" /><div><MudText Typo="Typo.caption" Class="renatus-muted">@L["admin.sessions"]</MudText><MudText Typo="Typo.h5">@_overview.TotalClients</MudText></div></MudPaper>
+        </div>
+        <MudPaper Class="renatus-panel" Elevation="0">
+            <MudText Typo="Typo.h5" Class="renatus-panel-heading">@L["admin.recentActivity"]</MudText>
+            <MudTable Items="@_overview.RecentActivities" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
+                <HeaderContent><MudTh>@L["admin.user"]</MudTh><MudTh>@L["admin.player"]</MudTh><MudTh>@L["admin.lastUsed"]</MudTh></HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel='@L["admin.user"]'>@context.UserName</MudTd>
+                    <MudTd DataLabel='@L["admin.player"]'>@(context.PlayerName ?? L["admin.unassigned"])</MudTd>
+                    <MudTd DataLabel='@L["admin.lastUsed"]'>@context.LastUsedAt.ToLocalTime().ToString("g")</MudTd>
+                </RowTemplate>
+                <NoRecordsContent><MudText Class="renatus-muted">@L["admin.noActivity"]</MudText></NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private readonly CancellationTokenSource _cancellation = new();
+    private AdminOverviewDto? _overview;
+    private string? _errorMessage;
+    private bool _loading = true;
+
+    [Inject] private AuthService AuthService { get; set; } = default!;
+    [Inject] private PlayerService PlayerService { get; set; } = default!;
+    [Inject] private TextureService TextureService { get; set; } = default!;
+    [Inject] private YggdrasilService YggdrasilService { get; set; } = default!;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _errorMessage = null;
+        try
+        {
+            var users = await AuthService.CountUsersAsync(_cancellation.Token);
+            var players = await PlayerService.CountPlayersAsync(_cancellation.Token);
+            var textures = await TextureService.CountTexturesAsync(_cancellation.Token);
+            var sessions = await YggdrasilService.GetSessionOverviewAsync(10, _cancellation.Token);
+            _overview = new AdminOverviewDto(users, players, textures, sessions.TotalClients, sessions.RecentActivities);
+        }
+        catch (InvalidOperationException exception)
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(exception.Message) ? L["admin.loadError"] : exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public void Dispose() => _cancellation.Cancel();
+}

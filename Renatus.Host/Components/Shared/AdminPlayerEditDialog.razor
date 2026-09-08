@@ -1,0 +1,92 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_name" Label='@L["players.name"]' Required="true" Validation="@((Func<string, string?>)ValidateName)" />
+                <MudSelect T="SkinModel" @bind-Value="_skinModel" Label='@L["textures.skinModel"]'>
+                    <MudSelectItem Value="SkinModel.Default">@L["textures.default"]</MudSelectItem>
+                    <MudSelectItem Value="SkinModel.Slim">@L["textures.slim"]</MudSelectItem>
+                </MudSelect>
+                <MudTextField @bind-Value="_userId" Label='@L["admin.ownerId"]' Validation="@((Func<string, string?>)ValidateGuid)" />
+                <MudTextField @bind-Value="_skinTextureId" Label='@L["players.skinTextureId"]' Validation="@((Func<string, string?>)ValidateGuid)" />
+                <MudSwitch @bind-Value="_clearSkinTexture" Color="Color.Warning" Label='@L["admin.clearSkin"]' />
+                <MudTextField @bind-Value="_capeTextureId" Label='@L["players.capeTextureId"]' Validation="@((Func<string, string?>)ValidateGuid)" />
+                <MudSwitch @bind-Value="_clearCapeTexture" Color="Color.Warning" Label='@L["admin.clearCape"]' />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@L["players.cancel"]</MudButton>
+        <MudButton OnClick="Submit" Color="Color.Primary" Variant="Variant.Filled">@L["players.save"]</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm? _form;
+    private string _name = string.Empty;
+    private string _userId = string.Empty;
+    private string _skinTextureId = string.Empty;
+    private string _capeTextureId = string.Empty;
+    private SkinModel _skinModel;
+    private bool _clearSkinTexture;
+    private bool _clearCapeTexture;
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public AdminPlayerDetailDto Player { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        _name = Player.Name;
+        _userId = Player.UserId.ToString("D");
+        _skinModel = Player.SkinModel;
+        _skinTextureId = Player.SkinTextureId?.ToString("D") ?? string.Empty;
+        _capeTextureId = Player.CapeTextureId?.ToString("D") ?? string.Empty;
+    }
+
+    private async Task Submit()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        await _form.ValidateAsync();
+        if (!_form.IsValid || !TryParseGuid(_userId, out var userId) || !TryParseGuid(_skinTextureId, out var skinTextureId) || !TryParseGuid(_capeTextureId, out var capeTextureId))
+        {
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(new AdminPlayerEditResult(
+            _name.Trim(), _skinModel, userId, skinTextureId, capeTextureId, _clearSkinTexture, _clearCapeTexture)));
+    }
+
+    private string? ValidateName(string value) => System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), "^[A-Za-z0-9_]{1,16}$") ? null : L["players.invalidName"];
+    private string? ValidateGuid(string value) => TryParseGuid(value, out _) ? null : L["players.invalidTextureId"];
+
+    private static bool TryParseGuid(string value, out Guid? id)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            id = null;
+            return true;
+        }
+
+        var parsed = Guid.TryParse(value.Trim(), out var valueId);
+        id = parsed ? valueId : null;
+        return parsed;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public sealed record AdminPlayerEditResult(
+        string Name,
+        SkinModel SkinModel,
+        Guid? UserId,
+        Guid? SkinTextureId,
+        Guid? CapeTextureId,
+        bool ClearSkinTexture,
+        bool ClearCapeTexture);
+}
