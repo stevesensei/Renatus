@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Globalization;
 using System.Text.Json.Serialization;
+using AutoMapper;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -58,6 +59,7 @@ builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();
 builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
+builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;

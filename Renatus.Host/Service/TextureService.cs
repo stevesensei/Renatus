@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Entity;
@@ -10,7 +11,8 @@ namespace Renatus.Host.Service;
 
 public sealed class TextureService(
     IDbContextFactory<AppDbContext> dbContextFactory,
-    ICacheService cacheService)
+    ICacheService cacheService,
+    IMapper mapper)
 {
     public async Task<TextureDto> UploadTextureAsync(
         Guid userId,
@@ -244,4 +246,198 @@ public sealed class TextureService(
             texture.Sha256,
             texture.CreatedAt);
     }
+
+    #region Admin
+
+    public async Task<AdminPageDto<AdminTextureListItemDto>> ListTexturesAsync(
+        int page,
+        int pageSize,
+        bool? isPublic,
+        TextureType? type,
+        Guid? uploaderId,
+        TextureSource? source,
+        string? sha256,
+        CancellationToken cancellationToken)
+    {
+        const int maxPageSize = 100;
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, maxPageSize);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var query = dbContext.Textures
+            .AsNoTracking()
+            .Include(texture => texture.User)
+            .AsQueryable();
+
+        if (isPublic is not null)
+        {
+            query = query.Where(texture => texture.IsPublic == isPublic.Value);
+        }
+
+        if (type is not null)
+        {
+            query = query.Where(texture => texture.Type == type.Value);
+        }
+
+        if (uploaderId is not null)
+        {
+            query = query.Where(texture => texture.UserId == uploaderId.Value);
+        }
+
+        if (source is not null)
+        {
+            query = query.Where(texture => texture.Source == source.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(sha256))
+        {
+            var normalizedHash = sha256.Trim().ToLowerInvariant();
+            query = query.Where(texture => texture.Sha256 != null && texture.Sha256 == normalizedHash);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
+        if (totalPages > 0)
+        {
+            page = Math.Min(page, totalPages);
+        }
+
+        var textures = await query
+            .OrderByDescending(texture => texture.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArrayAsync(cancellationToken);
+
+        var items = textures.Select(texture => mapper.Map<AdminTextureListItemDto>(texture, options =>
+        {
+            options.Items[AdminMappingContextKeys.UploaderId] = texture.UserId;
+            options.Items[AdminMappingContextKeys.UploaderName] = UploaderDisplayName(texture);
+        })).ToArray();
+
+        return new AdminPageDto<AdminTextureListItemDto>(items, page, pageSize, totalCount, totalPages);
+    }
+
+    public async Task<AdminTextureDetailDto> GetTextureDetailAsync(Guid textureId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var texture = await dbContext.Textures
+            .AsNoTracking()
+            .Include(entity => entity.User)
+            .FirstOrDefaultAsync(entity => entity.Id == textureId, cancellationToken);
+        if (texture is null)
+        {
+            throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
+        }
+
+        return mapper.Map<AdminTextureDetailDto>(texture, options =>
+        {
+            options.Items[AdminMappingContextKeys.UploaderId] = texture.UserId;
+            options.Items[AdminMappingContextKeys.UploaderName] = UploaderDisplayName(texture);
+        });
+    }
+
+    public async Task<AdminTextureDetailDto> UpdateTextureAsync(
+        Guid textureId,
+        AdminUpdateTextureRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var texture = await dbContext.Textures.FirstOrDefaultAsync(entity => entity.Id == textureId, cancellationToken);
+        if (texture is null)
+        {
+            throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
+        }
+
+        if (request.Name is not null)
+        {
+            var name = request.Name.Trim();
+            if (name.Length is < 1 or > 80)
+            {
+                throw new TextureException(StatusCodes.Status400BadRequest, "Texture name must be 1-80 characters.");
+            }
+
+            texture.Name = name;
+        }
+
+        if (request.DescriptionMarkdown is not null)
+        {
+            var description = request.DescriptionMarkdown.Trim();
+            if (description.Length > 4000)
+            {
+                throw new TextureException(StatusCodes.Status400BadRequest, "Texture description must be 4000 characters or fewer.");
+            }
+
+            texture.DescriptionMarkdown = description;
+        }
+
+        if (request.IsPublic is not null)
+        {
+            texture.IsPublic = request.IsPublic.Value;
+        }
+
+        if (request.Source is not null)
+        {
+            texture.Source = request.Source.Value;
+        }
+
+        if (request.SkinModel is not null && texture.Type == TextureType.Skin)
+        {
+            texture.SkinModel = request.SkinModel.Value;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
+
+        return await GetTextureDetailAsync(textureId, cancellationToken);
+    }
+
+    public async Task DeleteTextureAdminAsync(Guid textureId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var texture = await dbContext.Textures.FirstOrDefaultAsync(entity => entity.Id == textureId, cancellationToken);
+        if (texture is null)
+        {
+            throw new TextureException(StatusCodes.Status404NotFound, "Texture was not found.");
+        }
+
+        var affectedUserIds = await ClearPlayerTextureReferencesAsync(dbContext, texture, cancellationToken);
+        dbContext.Textures.Remove(texture);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var affectedUserId in affectedUserIds)
+        {
+            await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(affectedUserId), cancellationToken);
+        }
+
+        if (texture.UserId is not null)
+        {
+            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteIdsCacheKey(texture.UserId.Value), cancellationToken);
+            await cacheService.RemoveAsync(TextureLibraryService.UserFavoriteTexturesCacheKey(texture.UserId.Value), cancellationToken);
+        }
+
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
+    }
+
+    public async Task<int> CountTexturesAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Textures.CountAsync(cancellationToken);
+    }
+
+    private static string UploaderDisplayName(Texture texture)
+    {
+        if (texture.User is null)
+        {
+            return "Renatus";
+        }
+
+        return string.IsNullOrWhiteSpace(texture.User.NickName) ? texture.User.UserName : texture.User.NickName;
+    }
+
+    #endregion
 }

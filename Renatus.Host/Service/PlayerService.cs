@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Entity;
@@ -9,7 +10,8 @@ namespace Renatus.Host.Service;
 
 public sealed partial class PlayerService(
     IDbContextFactory<AppDbContext> dbContextFactory,
-    ICacheService cacheService)
+    ICacheService cacheService,
+    IMapper mapper)
 {
     private static readonly TimeSpan UserPlayersCacheTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan PlayerCacheTtl = TimeSpan.FromMinutes(5);
@@ -250,4 +252,208 @@ public sealed partial class PlayerService(
 
     [GeneratedRegex("^[A-Za-z0-9_]{1,16}$")]
     private static partial Regex PlayerNameRegex();
+
+    #region Admin
+
+    public async Task<AdminPageDto<AdminPlayerListItemDto>> ListPlayersAsync(
+        int page,
+        int pageSize,
+        Guid? ownerId,
+        string? search,
+        CancellationToken cancellationToken)
+    {
+        const int maxPageSize = 100;
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, maxPageSize);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var query = dbContext.Players
+            .AsNoTracking()
+            .Include(player => player.User)
+            .AsQueryable();
+
+        if (ownerId is not null)
+        {
+            query = query.Where(player => player.UserId == ownerId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalized = YggdrasilFormat.Normalize(search);
+            query = query.Where(player =>
+                player.NormalizedName.Contains(normalized)
+                || player.User.NormalizedUserName.Contains(normalized)
+                || player.User.NormalizedEmail.Contains(normalized));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
+        if (totalPages > 0)
+        {
+            page = Math.Min(page, totalPages);
+        }
+
+        var players = await query
+            .OrderByDescending(player => player.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArrayAsync(cancellationToken);
+
+        var items = players.Select(player => mapper.Map<AdminPlayerListItemDto>(player, options =>
+        {
+            options.Items[AdminMappingContextKeys.OwnerUserName] = player.User?.UserName ?? string.Empty;
+        })).ToArray();
+
+        return new AdminPageDto<AdminPlayerListItemDto>(items, page, pageSize, totalCount, totalPages);
+    }
+
+    public async Task<AdminPlayerDetailDto> GetPlayerDetailAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var player = await dbContext.Players
+            .AsNoTracking()
+            .Include(entity => entity.User)
+            .Include(entity => entity.SkinTexture)
+            .Include(entity => entity.CapeTexture)
+            .FirstOrDefaultAsync(entity => entity.Id == playerId, cancellationToken);
+        if (player is null)
+        {
+            throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+        }
+
+        return mapper.Map<AdminPlayerDetailDto>(player, options =>
+        {
+            options.Items[AdminMappingContextKeys.OwnerUserName] = player.User?.UserName ?? string.Empty;
+        });
+    }
+
+    public async Task<AdminPlayerDetailDto> UpdatePlayerAsync(
+        Guid playerId,
+        AdminUpdatePlayerRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var player = await dbContext.Players.FirstOrDefaultAsync(entity => entity.Id == playerId, cancellationToken);
+        if (player is null)
+        {
+            throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+        }
+
+        var originalOwnerId = player.UserId;
+
+        if (request.Name is not null)
+        {
+            var name = request.Name.Trim();
+            ValidatePlayerName(name);
+            var normalizedName = YggdrasilFormat.Normalize(name);
+            var nameExists = await dbContext.Players.AnyAsync(
+                entity => entity.Id != playerId && entity.NormalizedName == normalizedName,
+                cancellationToken);
+            if (nameExists)
+            {
+                throw new PlayerException(StatusCodes.Status409Conflict, "Player name already exists.");
+            }
+
+            player.Name = name;
+            player.NormalizedName = normalizedName;
+        }
+
+        if (request.SkinModel is not null)
+        {
+            player.SkinModel = request.SkinModel.Value;
+        }
+
+        if (request.ClearSkinTexture)
+        {
+            player.SkinTextureId = null;
+        }
+        else if (request.SkinTextureId is not null)
+        {
+            await EnsureAdminTextureTypeAsync(dbContext, request.SkinTextureId.Value, TextureType.Skin, cancellationToken);
+            player.SkinTextureId = request.SkinTextureId;
+        }
+
+        if (request.ClearCapeTexture)
+        {
+            player.CapeTextureId = null;
+        }
+        else if (request.CapeTextureId is not null)
+        {
+            await EnsureAdminTextureTypeAsync(dbContext, request.CapeTextureId.Value, TextureType.Cape, cancellationToken);
+            player.CapeTextureId = request.CapeTextureId;
+        }
+
+        if (request.UserId is not null && request.UserId.Value != player.UserId)
+        {
+            var targetUserId = request.UserId.Value;
+            var targetUser = await dbContext.Users
+                .AsNoTracking()
+                .Include(entity => entity.Players)
+                .FirstOrDefaultAsync(entity => entity.Id == targetUserId, cancellationToken);
+            if (targetUser is null)
+            {
+                throw new PlayerException(StatusCodes.Status404NotFound, "Target user was not found.");
+            }
+
+            if (targetUser.IsDisabled)
+            {
+                throw new PlayerException(StatusCodes.Status400BadRequest, "Target user is disabled.");
+            }
+
+            if (targetUser.Players.Count >= targetUser.MaxPlayerCount)
+            {
+                throw new PlayerException(StatusCodes.Status409Conflict, "Target user's player limit has been reached.");
+            }
+
+            player.UserId = targetUserId;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await RemovePlayerCachesAsync(originalOwnerId, playerId, cancellationToken);
+        if (player.UserId != originalOwnerId)
+        {
+            await RemovePlayerCachesAsync(player.UserId, playerId, cancellationToken);
+        }
+
+        return await GetPlayerDetailAsync(playerId, cancellationToken);
+    }
+
+    public async Task DeletePlayerAdminAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var player = await dbContext.Players.FirstOrDefaultAsync(entity => entity.Id == playerId, cancellationToken);
+        if (player is null)
+        {
+            throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+        }
+
+        var ownerId = player.UserId;
+        dbContext.Players.Remove(player);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await RemovePlayerCachesAsync(ownerId, playerId, cancellationToken);
+    }
+
+    public async Task<int> CountPlayersAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Players.CountAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAdminTextureTypeAsync(
+        AppDbContext dbContext,
+        Guid textureId,
+        TextureType textureType,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.Textures
+            .AsNoTracking()
+            .AnyAsync(entity => entity.Id == textureId && entity.Type == textureType, cancellationToken);
+        if (!exists)
+        {
+            throw new PlayerException(StatusCodes.Status404NotFound, $"{textureType} texture was not found.");
+        }
+    }
+
+    #endregion
 }

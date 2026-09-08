@@ -3,21 +3,25 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
+using Renatus.Host.Service.Cache;
 using Renatus.Host.Utils;
 using StackExchange.Redis;
 
 namespace Renatus.Host.Service;
 
-public sealed class AuthService(
+public sealed partial class AuthService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IConnectionMultiplexer connectionMultiplexer,
-    IOptions<AuthOptions> options)
+    IOptions<AuthOptions> options,
+    ICacheService cacheService,
+    IMapper mapper)
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
 
@@ -246,4 +250,270 @@ public sealed class AuthService(
     }
 
     private sealed record AuthSessionKey(string PrivateKeyPem, long CreatedUnixTimeSeconds);
+
+    #region Admin
+
+    public async Task<AdminPageDto<AdminUserListItemDto>> ListUsersAsync(
+        int page,
+        int pageSize,
+        string? search,
+        UserRole? role,
+        bool? isDisabled,
+        CancellationToken cancellationToken)
+    {
+        const int maxPageSize = 100;
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, maxPageSize);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var query = dbContext.Users.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalized = YggdrasilFormat.Normalize(search);
+            query = query.Where(user =>
+                user.NormalizedUserName.Contains(normalized) || user.NormalizedEmail.Contains(normalized));
+        }
+
+        if (role is not null)
+        {
+            query = query.Where(user => user.Role == role.Value);
+        }
+
+        if (isDisabled is not null)
+        {
+            query = query.Where(user => user.IsDisabled == isDisabled.Value);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = totalCount == 0 ? 0 : (totalCount + pageSize - 1) / pageSize;
+        if (totalPages > 0)
+        {
+            page = Math.Min(page, totalPages);
+        }
+
+        var users = await query
+            .OrderByDescending(user => user.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArrayAsync(cancellationToken);
+
+        var items = mapper.Map<AdminUserListItemDto[]>(users);
+        return new AdminPageDto<AdminUserListItemDto>(items, page, pageSize, totalCount, totalPages);
+    }
+
+    public async Task<AdminUserDetailDto> GetUserDetailAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users
+            .AsNoTracking()
+            .Include(entity => entity.Players)
+            .Include(entity => entity.Textures)
+            .Include(entity => entity.Clients)
+            .ThenInclude(client => client.Player)
+            .FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        var mapped = mapper.Map<AdminUserDetailDto>(user, options =>
+        {
+            options.Items[AdminMappingContextKeys.OwnerUserName] = user.UserName;
+            options.Items[AdminMappingContextKeys.UploaderId] = user.Id;
+            options.Items[AdminMappingContextKeys.UploaderName] = UploaderDisplayName(user.UserName, user.NickName);
+        });
+        return mapped;
+    }
+
+    public async Task<AdminUserListItemDto> UpdateUserAsync(
+        Guid userId,
+        AdminUpdateUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users.FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        if (request.Role == UserRole.Player && user.Role == UserRole.Admin)
+        {
+            await EnsureAdminNotLastAsync(dbContext, userId, cancellationToken);
+        }
+
+        if (request.IsDisabled == true && user.Role == UserRole.Admin)
+        {
+            await EnsureAdminNotLastAsync(dbContext, userId, cancellationToken);
+        }
+
+        if (request.NickName is not null)
+        {
+            var nickName = request.NickName.Trim();
+            if (nickName.Length is < 1 or > 64)
+            {
+                throw new AuthException(StatusCodes.Status400BadRequest, "Nickname must be 1-64 characters.");
+            }
+
+            user.NickName = nickName;
+        }
+
+        if (request.Email is not null)
+        {
+            var email = request.Email.Trim();
+            var normalizedEmail = YggdrasilFormat.Normalize(email);
+            if (string.IsNullOrWhiteSpace(email) || email.Length > 256 || !EmailRegex().IsMatch(email))
+            {
+                throw new AuthException(StatusCodes.Status400BadRequest, "Email is invalid.");
+            }
+
+            var duplicate = await dbContext.Users.AnyAsync(
+                entity => entity.Id != userId && entity.NormalizedEmail == normalizedEmail,
+                cancellationToken);
+            if (duplicate)
+            {
+                throw new AuthException(StatusCodes.Status409Conflict, "Email already exists.");
+            }
+
+            user.Email = email;
+            user.NormalizedEmail = normalizedEmail;
+        }
+
+        if (request.PreferredLanguage is not null)
+        {
+            var language = request.PreferredLanguage.Trim();
+            if (string.IsNullOrWhiteSpace(language) || language.Length > 16)
+            {
+                throw new AuthException(StatusCodes.Status400BadRequest, "Preferred language is invalid.");
+            }
+
+            user.PreferredLanguage = language;
+        }
+
+        if (request.Role is not null)
+        {
+            user.Role = request.Role.Value;
+        }
+
+        if (request.MaxPlayerCount is not null)
+        {
+            if (request.MaxPlayerCount.Value is < 0 or > 100)
+            {
+                throw new AuthException(StatusCodes.Status400BadRequest, "Max player count must be between 0 and 100.");
+            }
+
+            user.MaxPlayerCount = request.MaxPlayerCount.Value;
+        }
+
+        if (request.IsDisabled is not null)
+        {
+            user.IsDisabled = request.IsDisabled.Value;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return mapper.Map<AdminUserListItemDto>(user);
+    }
+
+    public async Task ResetPasswordAsync(Guid userId, string newPassword, CancellationToken cancellationToken)
+    {
+        EnsurePasswordAllowed(newPassword);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users
+            .Include(entity => entity.AuthenticationMethods)
+            .FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        var passwordMethod = user.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
+        if (passwordMethod is null)
+        {
+            passwordMethod = new UserAuthenticationMethod
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Type = AuthenticationMethodType.Password
+            };
+            dbContext.UserAuthenticationMethods.Add(passwordMethod);
+        }
+
+        passwordMethod.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var user = await dbContext.Users.FirstOrDefaultAsync(entity => entity.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        if (user.Role == UserRole.Admin)
+        {
+            await EnsureAdminNotLastAsync(dbContext, userId, cancellationToken);
+        }
+
+        var textureIds = await dbContext.Textures
+            .AsNoTracking()
+            .Where(texture => texture.UserId == userId)
+            .Select(texture => texture.Id)
+            .ToArrayAsync(cancellationToken);
+
+        var playerIds = await dbContext.Players
+            .AsNoTracking()
+            .Where(player => player.UserId == userId)
+            .Select(player => player.Id)
+            .ToArrayAsync(cancellationToken);
+
+        dbContext.Users.Remove(user);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(userId), cancellationToken);
+        foreach (var playerId in playerIds)
+        {
+            await cacheService.RemoveAsync(PlayerService.PlayerCacheKey(userId, playerId), cancellationToken);
+        }
+
+        await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCountCacheKey(), cancellationToken);
+        foreach (var textureId in textureIds)
+        {
+            await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
+            await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
+        }
+    }
+
+    public async Task<int> CountUsersAsync(CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.Users.CountAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAdminNotLastAsync(
+        AppDbContext dbContext,
+        Guid adminUserId,
+        CancellationToken cancellationToken)
+    {
+        var otherAdmins = await dbContext.Users
+            .AsNoTracking()
+            .CountAsync(
+                entity => entity.Role == UserRole.Admin && entity.Id != adminUserId,
+                cancellationToken);
+        if (otherAdmins == 0)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "Cannot demote or disable the last administrator.");
+        }
+    }
+
+    private static string UploaderDisplayName(string userName, string nickName)
+    {
+        return string.IsNullOrWhiteSpace(nickName) ? userName : nickName;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")]
+    private static partial System.Text.RegularExpressions.Regex EmailRegex();
+
+    #endregion
 }

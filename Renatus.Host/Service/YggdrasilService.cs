@@ -433,6 +433,81 @@ public sealed partial class YggdrasilService(
         return $"{signingInput}.{YggdrasilFormat.Base64UrlEncode(signature)}";
     }
 
+    #region Admin
+
+    public async Task<AdminSessionOverviewDto> GetSessionOverviewAsync(
+        int recentCount,
+        CancellationToken cancellationToken)
+    {
+        recentCount = Math.Clamp(recentCount, 1, 50);
+        var totalClients = await dbContext.YggdrasilClients.CountAsync(cancellationToken);
+        var recentClients = await dbContext.YggdrasilClients
+            .AsNoTracking()
+            .Include(client => client.User)
+            .Include(client => client.Player)
+            .OrderByDescending(client => client.LastUsedAt)
+            .Take(recentCount)
+            .ToArrayAsync(cancellationToken);
+
+        var recentActivities = recentClients
+            .Select(client => new AdminRecentActivityDto(
+                client.Id,
+                client.UserId,
+                client.User?.UserName ?? string.Empty,
+                client.PlayerId,
+                client.Player?.Name,
+                client.LastUsedAt))
+            .ToArray();
+        return new AdminSessionOverviewDto(totalClients, recentActivities);
+    }
+
+    public async Task RevokeAllUserSessionsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var userExists = await dbContext.Users.AnyAsync(user => user.Id == userId, cancellationToken);
+        if (!userExists)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        await dbContext.YggdrasilClients
+            .Where(client => client.UserId == userId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(client => client.Version, client => client.Version + 1),
+                cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<AdminSessionDto>> ListUserSessionsAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var userExists = await dbContext.Users.AnyAsync(user => user.Id == userId, cancellationToken);
+        if (!userExists)
+        {
+            throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
+        }
+
+        var clients = await dbContext.YggdrasilClients
+            .AsNoTracking()
+            .Include(client => client.Player)
+            .Where(client => client.UserId == userId)
+            .OrderByDescending(client => client.LastUsedAt)
+            .ToArrayAsync(cancellationToken);
+
+        return clients
+            .Select(client => new AdminSessionDto(
+                client.Id,
+                client.ClientToken,
+                client.Version,
+                client.PlayerId,
+                client.Player?.Name,
+                client.AuthenticationMethod,
+                client.CreatedAt,
+                client.LastUsedAt))
+            .ToArray();
+    }
+
+    #endregion
+
     private async Task<YggdrasilClient> ValidateAccessTokenAsync(
         string accessToken,
         string? clientToken,
