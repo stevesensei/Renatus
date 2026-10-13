@@ -104,6 +104,12 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 - **Tokens**: white form surface, blue-violet primary action, quiet borders, and the transparent skin stage tokens from the detail preview.
 - **Accessibility**: every form control has a visible label; file validation is announced inline; preview updates are described without relying on color alone.
 
+### Verification email
+- **Structure**: a centered 600px presentation table with a violet brand rule, site identity, verification heading, one selectable code, expiry guidance, and a quiet footer.
+- **Tokens**: existing page, surface, ink, muted, border, and accent-strong colors are copied into inline styles for email clients. Use the system/CJK font stack, 4px spacing units, 14px supporting text, 16px body, 24px heading, and 36px monospace code (32px on narrow screens).
+- **States**: template placeholders and populated message; 32px content padding reduces to 24px below 600px. Four to eight digit codes remain readable at 320px. No scripts, animation, web fonts, external images, or required links.
+- **Accessibility**: Chinese language declaration, semantic heading, selectable text code, decorative tables marked as presentation, and clear expiry/security guidance. Browser preview verifies layout; inbox-specific rendering requires the sending integration's own client checks.
+
 ## 6. Motion & Interaction
 - Buttons use MudBlazor's built-in hover, focus, and pressed states plus tokenized CSS transitions for panel lift.
 - The profile popover opens from the avatar with MudBlazor's anchored menu transition, closes on outside click or Escape, and keeps the avatar as the stable trigger. Reduced-motion users receive the same menu content without decorative transition emphasis.

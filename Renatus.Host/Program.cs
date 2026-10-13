@@ -38,6 +38,7 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 //builder.Services.Configure<RequestResponseLoggingOptions>(builder.Configuration.GetSection("RequestResponseLogging"));
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -59,6 +60,7 @@ builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();
 builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
+builder.Services.AddScoped<MailService>();
 builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
 builder.Services.AddControllers().AddJsonOptions(options =>
 {

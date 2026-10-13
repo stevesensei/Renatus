@@ -87,5 +87,16 @@
     "Body": "欢迎来到 **HLJUMC**。",
     "Image": ""
   },
+  // 腾讯云 SMTP 用户名为控制台创建的发信地址，密码为控制台设置的 SMTP 密码。
+  // 465 使用 SslOnConnect；587 使用 StartTls。密码也可通过 Smtp__Password 环境变量配置。
+  "Smtp": {
+    "Host": "smtp.qcloudmail.com",
+    "Port": 465,
+    "Security": "SslOnConnect",
+    "Username": "",
+    "Password": "",
+    "FromEmail": "",
+    "FromName": "Renatus"
+  },
   "AllowedHosts": "*"
 }

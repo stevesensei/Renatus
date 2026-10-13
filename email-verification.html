@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <title>{{SiteName}} 邮箱验证码</title>
+  <!--
+    建议邮件主题：{{SiteName}} 邮箱验证码
+    发送时使用 UTF-8、Content-Type: text/html，并替换以下占位符：
+      {{SiteName}}          站点名称，对应 Site:Title，当前项目为 HLJUMC。
+      {{VerificationCode}}  本次邮箱验证码，建议为 4–8 位数字。
+      {{ExpiresInMinutes}}  实际验证码有效期，单位为分钟。
+      {{Year}}              发送时的年份。
+    替换值必须先进行 HTML 编码；有效期必须与服务端一致。
+    本文件仅为邮件正文模板，不生成、发送或校验验证码。
+    颜色与排版沿用 DESIGN.md；为邮件客户端兼容，将样式内联。
+  -->
+  <style>
+    body { margin: 0 !important; padding: 0 !important; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    @media screen and (max-width: 600px) {
+      .email-shell { padding: 20px 12px !important; }
+      .email-content { padding: 28px 24px !important; }
+      .verification-code { font-size: 32px !important; letter-spacing: 4px !important; }
+    }
+  </style>
+  <!--[if mso]>
+  <xml>
+    <o:OfficeDocumentSettings>
+      <o:AllowPNG/>
+      <o:PixelsPerInch>96</o:PixelsPerInch>
+    </o:OfficeDocumentSettings>
+  </xml>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:0;width:100%;background-color:#F4F6F8;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC',Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <div style="display:none;font-size:1px;line-height:1px;color:#F4F6F8;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;" aria-hidden="true">请在验证页面输入验证码，有效期为 {{ExpiresInMinutes}} 分钟。</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#F4F6F8" style="width:100%;background-color:#F4F6F8;">
+    <tr>
+      <td class="email-shell" align="center" style="padding:40px 12px;">
+        <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#FFFFFF" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #E4E7EC;border-radius:8px;table-layout:fixed;">
+          <tr>
+            <td bgcolor="#5B4BE7" height="4" style="height:4px;font-size:0;line-height:4px;background-color:#5B4BE7;border-radius:8px 8px 0 0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="email-content" style="padding:32px;">
+              <p style="margin:0 0 4px;color:#5B4BE7;font-size:20px;font-weight:700;line-height:28px;overflow-wrap:anywhere;word-break:keep-all;">{{SiteName}}</p>
+              <p style="margin:0 0 32px;color:#667085;font-size:14px;line-height:24px;">Minecraft 社区认证</p>
+
+              <h1 style="margin:0 0 16px;color:#172033;font-size:24px;font-weight:700;line-height:36px;">验证你的邮箱</h1>
+              <p style="margin:0 0 24px;color:#172033;font-size:16px;line-height:28px;overflow-wrap:anywhere;word-break:break-word;">请在验证页面输入验证码：</p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#F4F6F8" style="width:100%;background-color:#F4F6F8;border:1px solid #E4E7EC;border-radius:8px;table-layout:fixed;">
+                <tr>
+                  <td align="center" style="padding:20px 12px;">
+                    <p style="margin:0 0 8px;color:#667085;font-size:14px;line-height:24px;">邮箱验证码</p>
+                    <p class="verification-code" style="margin:0;color:#5B4BE7;font-family:Consolas,'Courier New',monospace;font-size:36px;font-weight:700;line-height:48px;letter-spacing:4px;word-break:break-all;">{{VerificationCode}}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:20px 0 0;color:#172033;font-size:16px;line-height:28px;">验证码有效期：<strong style="color:#172033;font-weight:700;">{{ExpiresInMinutes}} 分钟</strong>。</p>
+              <p style="margin:8px 0 0;color:#667085;font-size:14px;line-height:24px;">请及时完成本次邮箱验证。</p>
+              <p style="margin:12px 0 0;color:#667085;font-size:14px;line-height:24px;">请勿将验证码转发或告知他人。</p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:28px;">
+                <tr>
+                  <td style="border-top:1px solid #E4E7EC;padding-top:20px;">
+                    <p style="margin:0;color:#667085;font-size:14px;line-height:24px;">如非本人操作，请忽略此邮件。</p>
+                    <p style="margin:8px 0 0;color:#667085;font-size:14px;line-height:24px;">系统自动发送，请勿直接回复。</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+        <p style="margin:20px 0 0;color:#667085;font-size:14px;line-height:24px;overflow-wrap:anywhere;word-break:keep-all;">&copy; {{Year}} {{SiteName}}<br>Powered by Renatus</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
