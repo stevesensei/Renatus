@@ -35,6 +35,8 @@ public sealed class AppConfigurationService(
         options.HeroImage = options.HeroImage.Trim();
         options.Title = options.Title.Trim();
         options.Description = options.Description.Trim();
+        options.Copyright = options.Copyright.Trim();
+        options.IcpRegistrationNumber = options.IcpRegistrationNumber.Trim();
         options.Buttons = (options.Buttons ?? [])
             .Where(button => !string.IsNullOrWhiteSpace(button.Label) || !string.IsNullOrWhiteSpace(button.Url))
             .Take(3)

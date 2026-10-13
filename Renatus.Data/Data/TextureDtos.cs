@@ -5,11 +5,11 @@ using Renatus.Host.Entity;
 namespace Renatus.Host.Data;
 
 public sealed record UploadTextureRequest(
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("type")]
     TextureType? Type,
 
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("dataBase64")]
     string DataBase64,
 
@@ -79,7 +79,7 @@ public sealed record TexturePreviewDto(
     [property: JsonPropertyName("isFavorited")] bool IsFavorited);
 
 public sealed record FavoriteTextureRequest(
-    [property: Required]
+    [param: Required]
     [property: JsonPropertyName("textureId")]
     Guid TextureId);
 
@@ -89,3 +89,5 @@ public sealed record FavoriteTextureResponse(
 
 public sealed record UserFavoriteTexturesResponse(
     [property: JsonPropertyName("textures")] IReadOnlyCollection<TextureDto> Textures);
+
+public sealed record PublicTextureQuery(int Page, int PageSize, string? Search, TextureType? Type);

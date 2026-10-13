@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Renatus.Host.Data;
 using Renatus.Host.Service;
+using Renatus.Host.Entity;
 using Renatus.Host.Utils;
 
 namespace Renatus.Host.Controller;
@@ -17,18 +18,30 @@ public sealed class TextureController(TextureService textureService, TextureLibr
     public async Task<GlobalResponse<PublicTexturePageResponse>> GetPublicTextures(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 12,
+        [FromQuery] string? search = null,
+        [FromQuery] TextureType? type = null,
         CancellationToken cancellationToken = default)
     {
         try
         {
             var userId = TryGetOptionalUserId();
-            var response = await textureLibraryService.GetPublicTexturesAsync(page, pageSize, userId, cancellationToken);
+            var response = await textureLibraryService.GetFilteredPublicTexturesAsync(new PublicTextureQuery(page, pageSize, search, type), userId, cancellationToken);
             return GlobalResponse<PublicTexturePageResponse>.Success(response);
         }
         catch (TextureException exception)
         {
             return GlobalResponse<PublicTexturePageResponse>.ResultError(message: exception.Message);
         }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{textureId:guid}")]
+    public async Task<GlobalResponse<TexturePreviewDto>> GetPreview(Guid textureId, CancellationToken cancellationToken)
+    {
+        var response = await textureLibraryService.GetPreviewAsync(textureId, TryGetOptionalUserId(), cancellationToken);
+        return response is null
+            ? GlobalResponse<TexturePreviewDto>.ResultError(message: "Texture was not found.")
+            : GlobalResponse<TexturePreviewDto>.Success(response);
     }
 
     [HttpPost("favorite")]

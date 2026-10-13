@@ -5,8 +5,8 @@ using Renatus.Host.Entity;
 namespace Renatus.Host.Data;
 
 public sealed record CreatePlayerRequest(
-    [property: Required]
-    [property: MaxLength(16)]
+    [param: Required]
+    [param: MaxLength(16)]
     [property: JsonPropertyName("name")]
     string Name,
 

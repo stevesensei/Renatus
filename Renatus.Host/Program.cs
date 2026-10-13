@@ -3,14 +3,10 @@ using System.Text;
 using System.Globalization;
 using System.Text.Json.Serialization;
 using AutoMapper;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using MudBlazor.Services;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
@@ -37,9 +33,7 @@ builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth")
 builder.Services.Configure<SiteOptions>(builder.Configuration.GetSection(SiteOptions.SectionName));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 //builder.Services.Configure<RequestResponseLoggingOptions>(builder.Configuration.GetSection("RequestResponseLogging"));
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-builder.Services.AddMudServices();
+
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
@@ -60,7 +54,7 @@ builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-});;
+});
 builder.Services.AddEndpointsApiExplorer();
 
 var authOptions = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
@@ -69,22 +63,7 @@ if (string.IsNullOrWhiteSpace(authOptions.JwtSigningKey))
     throw new InvalidOperationException("Auth:JwtSigningKey must be configured.");
 }
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    })
-    .AddCookie(options =>
-    {
-        options.LoginPath = "/login";
-        options.AccessDeniedPath = "/login";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.ExpireTimeSpan = TimeSpan.FromDays(3);
-        options.SlidingExpiration = true;
-    })
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(jwtOptions =>
     {
         jwtOptions.MapInboundClaims = false;
@@ -105,7 +84,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(nameof(UserRole.Admin), policy => policy.RequireRole(nameof(UserRole.Admin)))
     .AddPolicy(nameof(UserRole.Player), policy => policy.RequireRole(nameof(UserRole.Player)));
-builder.Services.AddCascadingAuthenticationState();
+
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -157,24 +136,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseDefaultFiles();
 app.UseStaticFiles();
-app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallback("/api/{**path}", () => Results.NotFound());
+app.MapFallbackToFile("index.html");
 
-app.MapGet("/account/signout", async (HttpContext context) =>
-{
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    return Results.Redirect("/login");
-});
 
 app.Run();
-
-static bool IsLocalUrl(string? url)
-{
-    return !string.IsNullOrEmpty(url)
-        && url.StartsWith('/')
-        && !url.StartsWith("//")
-        && !url.StartsWith("/\\");
-}

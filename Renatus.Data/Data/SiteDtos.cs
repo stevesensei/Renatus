@@ -8,7 +8,10 @@ public sealed record SiteConfigDto(
     [property: JsonPropertyName("description")] string Description,
     [property: JsonPropertyName("loginAnnouncement")] SiteAnnouncementDto LoginAnnouncement,
     [property: JsonPropertyName("siteAnnouncement")] SiteAnnouncementDto SiteAnnouncement,
-    [property: JsonPropertyName("buttons")] IReadOnlyList<SiteButtonDto> Buttons);
+    [property: JsonPropertyName("buttons")] IReadOnlyList<SiteButtonDto> Buttons,
+    [property: JsonPropertyName("apiBaseUrl")] string ApiBaseUrl,
+    [property: JsonPropertyName("copyright")] string Copyright,
+    [property: JsonPropertyName("icpRegistrationNumber")] string IcpRegistrationNumber);
 
 public sealed record SiteAnnouncementDto(
     [property: JsonPropertyName("title")] string Title,

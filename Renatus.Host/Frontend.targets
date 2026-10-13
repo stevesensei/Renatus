@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <BuildFrontend Condition="'$(BuildFrontend)' == ''">true</BuildFrontend>
+    <FrontendDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../Renatus.Front'))</FrontendDirectory>
+  </PropertyGroup>
+
+  <Target Name="BuildRenatusFrontend" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildFrontend)' == 'true'">
+    <Error Condition="!Exists('$(FrontendDirectory)/package.json')"
+           Text="Renatus.Front submodule is missing. Run git submodule update --init --recursive." />
+    <Exec Command="pnpm install --frozen-lockfile" WorkingDirectory="$(FrontendDirectory)" />
+    <Exec Command="pnpm run build" WorkingDirectory="$(FrontendDirectory)" />
+    <ItemGroup>
+      <FrontendOutput Include="$(FrontendDirectory)/dist/**/*" />
+      <PreviousFrontendAssets Include="$(MSBuildProjectDirectory)/wwwroot/assets/**/*" />
+      <Content Remove="wwwroot/**/*" />
+    </ItemGroup>
+    <Delete Files="@(PreviousFrontendAssets)" />
+    <Copy SourceFiles="@(FrontendOutput)"
+          DestinationFiles="@(FrontendOutput->'$(MSBuildProjectDirectory)/wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ItemGroup>
+      <Content Include="wwwroot/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>
+

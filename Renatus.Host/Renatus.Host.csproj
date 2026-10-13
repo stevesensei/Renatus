@@ -10,8 +10,6 @@
     <ItemGroup>
         <PackageReference Include="AutoMapper" Version="16.2.0" />
         <PackageReference Include="MailKit" Version="4.18.1" />
-        <PackageReference Include="MudBlazor" Version="9.9.0" />
-        <PackageReference Include="Markdig" Version="0.37.0" />
         <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.30" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.30" />
@@ -44,41 +42,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <_ContentIncludedByDefault Remove="Components\App.razor" />
-      <_ContentIncludedByDefault Remove="Components\Layout\MainLayout.razor" />
-      <_ContentIncludedByDefault Remove="Components\Layout\SkinDetailLayout.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AccountSettings.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminAnnouncements.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminOverview.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminPlayers.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminSiteSettings.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminTextures.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\AdminUsers.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\Dashboard.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\Error.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\Home.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\Login.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\Players.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\PlayerSettings.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\SkinPreview.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\TextureLibrary.razor" />
-      <_ContentIncludedByDefault Remove="Components\Pages\TextureUpload.razor" />
-      <_ContentIncludedByDefault Remove="Components\Routes.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminMarkdownEditor.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminPasswordDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminPlayerEditDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminTextureEditDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminUserDetailDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\AdminUserEditDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\LocalizedDataAnnotationsValidator.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\PlayerEditorDialog.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\ProtectedRoute.razor" />
-      <_ContentIncludedByDefault Remove="Components\Shared\RedirectToLogin.razor" />
-      <_ContentIncludedByDefault Remove="Components\_Imports.razor" />
-    </ItemGroup>
-
-    <ItemGroup>
       <ProjectReference Include="..\Renatus.Data\Renatus.Data.csproj" />
     </ItemGroup>
 
+    <Import Project="Frontend.targets" />
 </Project>

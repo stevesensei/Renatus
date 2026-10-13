@@ -1,0 +1,3 @@
+[submodule "Renatus.Front"]
+	path = Renatus.Front
+	url = git@github.com:stevesensei/Renatus.Frontend.git
