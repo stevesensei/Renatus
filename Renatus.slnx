@@ -2,5 +2,6 @@
   <Folder Name="/Solution Items/">
     <File Path="compose.yaml" />
   </Folder>
+  <Project Path="Renatus.Data/Renatus.Data.csproj" />
   <Project Path="Renatus.Host/Renatus.Host.csproj" />
 </Solution>
