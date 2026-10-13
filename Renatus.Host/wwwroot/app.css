@@ -79,11 +79,23 @@ textarea:focus-visible,
         url('/background.jpg') center / cover no-repeat;
 }
 
+.renatus-layout-auth {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+}
+
 .renatus-layout-home .renatus-main-full,
 .renatus-layout-auth .renatus-main-full {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
+}
+
+.renatus-layout-auth .renatus-main-full {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
 }
 
 .renatus-layout-home .mud-main-content,
@@ -99,6 +111,12 @@ textarea:focus-visible,
 .renatus-layout-home .renatus-main-full,
 .renatus-layout-auth .renatus-main-full {
     margin-top: 0 !important;
+}
+
+.renatus-layout-auth .mud-main-content {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
 }
 
 .renatus-main-contained {
@@ -398,10 +416,10 @@ textarea:focus-visible,
     display: grid;
     place-items: center;
     box-sizing: border-box;
-    height: 100dvh;
-    min-height: 0;
-    padding: 72px 24px 24px;
-    overflow: hidden;
+    height: auto;
+    min-height: 100dvh;
+    padding: 72px 24px 32px;
+    overflow: visible;
     background: transparent;
 }
 
@@ -416,7 +434,7 @@ textarea:focus-visible,
     backdrop-filter: blur(18px);
     min-width: 0;
     overflow: hidden;
-    max-height: calc(100dvh - 96px);
+    max-height: none;
 }
 
 .renatus-announcement,
@@ -667,14 +685,14 @@ textarea:focus-visible,
     }
 
     .renatus-auth-page {
-        height: 100dvh;
-        min-height: 0;
-        padding: 72px 16px 16px;
+        height: auto;
+        min-height: 100dvh;
+        padding: 72px 16px 24px;
     }
 
     .renatus-auth-shell {
         width: 100%;
-        max-height: calc(100dvh - 88px);
+        max-height: none;
     }
 
     .renatus-announcement,

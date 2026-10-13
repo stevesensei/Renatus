@@ -53,7 +53,15 @@
     "JwtSigningKey": "development-only-change-this-renatus-auth-signing-key-64-chars",
     "JwtExpireDays": 3,
     "SessionKeyTtlSeconds": 120,
-    "TimestampSkewSeconds": 120
+    "TimestampSkewSeconds": 120,
+    // 仅限制注册邮箱，不影响已有用户登录或修改邮箱。关闭时设 Enabled 为 false。
+    "RegistrationEmailDomains": {
+      "Enabled": true,
+      // Whitelist 只允许列表中的域名；Blacklist 禁止列表中的域名。
+      "Mode": "Whitelist",
+      // 精确匹配，忽略大小写；域名可带或不带 @ 前缀。
+      "Domains": ["s.hlju.edu.cn", "stu.hlju.edu.cn", "hlju.edu.cn"]
+    }
   },
   "Site": {
     "PublicBaseUrl": "http://localhost:5294/",
@@ -71,7 +79,7 @@
   },
   "LoginAnnouncement": {
     "Title": "告示",
-    "Body": "本网站开启邮箱域限制，请使用后缀为@s.hlju.edu.cn或@hlju.edu.cn的邮箱注册.",
+    "Body": "本网站开启邮箱域限制，请使用后缀为@s.hlju.edu.cn、@stu.hlju.edu.cn或@hlju.edu.cn的邮箱注册。",
     "Image": ""
   },
   "SiteAnnouncement": {
