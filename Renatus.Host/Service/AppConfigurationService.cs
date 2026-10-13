@@ -7,7 +7,7 @@ using Renatus.Host.Service.Cache;
 
 namespace Renatus.Host.Service;
 
-public sealed class AppConfigurationService(
+public sealed partial class AppConfigurationService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     ICacheService cacheService)
 {

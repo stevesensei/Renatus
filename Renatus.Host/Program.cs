@@ -36,7 +36,9 @@ builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOpt
 
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")).UseOpenIddict());
+builder.Services.AddOpenIddict().AddCore(options =>
+    options.UseEntityFrameworkCore().UseDbContext<AppDbContext>());
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();

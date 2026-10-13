@@ -47,6 +47,28 @@
     "SkinDomains": [],
     "DefaultSkinTextureId": null
   },
+  // Union/OIDC 配置首次初始化后保存在数据库中。私钥为空时自动生成并持久化。
+  // 新的部署秘密优先通过 Union__MemberKey 等环境变量或 user-secrets 提供。
+  // Union 下发的材质私钥独立保存在 union-state，不替换本地令牌签名密钥。
+  "Union": {
+    "Enabled": false,
+    "ApiRoot": "https://skin.mualliance.ltd/api/union",
+    "MemberCode": "",
+    "MemberKey": "",
+    "OAuth2Enabled": false,
+    "OAuth2SigningPrivateKeyPem": ""
+  },
+  "YggdrasilConnect": {
+    "Enabled": false,
+    "Issuer": "",
+    "SharedClientId": "",
+    "SigningPrivateKeyPem": "",
+    "EncryptionPrivateKeyPem": "",
+    "AccessTokenTtlSeconds": 3600,
+    "RefreshTokenTtlSeconds": 604800,
+    "AuthorizationCodeTtlSeconds": 600,
+    "DeviceCodeTtlSeconds": 600
+  },
   "Auth": {
     "JwtIssuer": "Renatus",
     "JwtAudience": "Renatus.Frontend",
@@ -54,7 +76,7 @@
     "JwtExpireDays": 3,
     "SessionKeyTtlSeconds": 120,
     "TimestampSkewSeconds": 120,
-    // 仅限制注册邮箱，不影响已有用户登录或修改邮箱。关闭时设 Enabled 为 false。
+    // 限制注册及验证新邮箱，不影响已有用户登录。关闭时设 Enabled 为 false。
     "RegistrationVerification": {
       "CodeTtlMinutes": 5,
       "EmailCooldownSeconds": 60,

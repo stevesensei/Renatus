@@ -98,6 +98,7 @@ public sealed partial class AuthService(
             NickName = nickName,
             Email = email,
             NormalizedEmail = normalizedEmail,
+            EmailVerifiedAt = DateTimeOffset.UtcNow,
             PreferredLanguage = "zh_CN",
             Role = UserRole.Player
         };
@@ -173,6 +174,13 @@ public sealed partial class AuthService(
         if (emailInUse)
         {
             throw new AuthException(StatusCodes.Status409Conflict, "Email is already in use.");
+        }
+
+        if (user.NormalizedEmail != normalizedEmail || !string.IsNullOrWhiteSpace(request.VerificationCode))
+        {
+            registrationVerificationService.EnsureEmailAllowed(email);
+            await registrationVerificationService.VerifyAndConsumeAsync(email, request.VerificationCode, cancellationToken);
+            user.EmailVerifiedAt = DateTimeOffset.UtcNow;
         }
 
         user.NickName = nickname;
@@ -330,7 +338,8 @@ public sealed partial class AuthService(
 
     private static AccountProfileDto ToAccountProfileDto(User user)
     {
-        return new AccountProfileDto(user.Id, user.UserName, user.NickName, user.Email, user.AvatarBase64, user.Role);
+        return new AccountProfileDto(
+            user.Id, user.UserName, user.NickName, user.Email, user.AvatarBase64, user.Role, user.EmailVerifiedAt);
     }
 
     private static string? NormalizeAvatarBase64(string? avatarBase64)
@@ -510,6 +519,11 @@ public sealed partial class AuthService(
             if (duplicate)
             {
                 throw new AuthException(StatusCodes.Status409Conflict, "Email already exists.");
+            }
+
+            if (user.NormalizedEmail != normalizedEmail)
+            {
+                user.EmailVerifiedAt = null;
             }
 
             user.Email = email;

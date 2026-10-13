@@ -12,6 +12,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UserTextureFavorite> UserTextureFavorites => Set<UserTextureFavorite>();
     public DbSet<YggdrasilClient> YggdrasilClients => Set<YggdrasilClient>();
     public DbSet<AppConfiguration> AppConfigurations => Set<AppConfiguration>();
+    public DbSet<YggdrasilActivity> YggdrasilActivities => Set<YggdrasilActivity>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -24,6 +25,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(user => user.Id);
+            entity.Property(user => user.UnionUserId).UseIdentityAlwaysColumn();
+            entity.HasIndex(user => user.UnionUserId).IsUnique();
             entity.Property(user => user.UserName).HasMaxLength(64).IsRequired();
             entity.Property(user => user.NormalizedUserName).HasMaxLength(64).IsRequired();
             entity.Property(user => user.NickName).HasMaxLength(64).IsRequired();
@@ -57,6 +60,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Player>(entity =>
         {
             entity.HasKey(player => player.Id);
+            entity.HasIndex(player => player.MinecraftUuid).IsUnique();
             entity.Property(player => player.Name).HasMaxLength(16).IsRequired();
             entity.Property(player => player.NormalizedName).HasMaxLength(16).IsRequired();
             entity.Property(player => player.SkinModel).HasConversion<string>().HasMaxLength(16).IsRequired();
@@ -131,6 +135,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(configuration => configuration.Value).HasColumnType("jsonb").IsRequired();
             entity.Property(configuration => configuration.UpdatedAt).IsRequired();
         });
+
+        modelBuilder.Entity<YggdrasilActivity>(entity =>
+        {
+            entity.HasKey(activity => activity.Id);
+            entity.Property(activity => activity.Action).HasMaxLength(64).IsRequired();
+            entity.Property(activity => activity.Parameters).HasColumnType("jsonb").IsRequired();
+            entity.Property(activity => activity.IpAddress).HasMaxLength(45);
+            entity.HasOne(activity => activity.User).WithMany()
+                .HasForeignKey(activity => activity.UserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(activity => activity.Player).WithMany()
+                .HasForeignKey(activity => activity.PlayerId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(activity => new { activity.UserId, activity.CreatedAt });
+            entity.HasIndex(activity => new { activity.PlayerId, activity.CreatedAt });
+            entity.HasIndex(activity => activity.CreatedAt);
+        });
+
+        modelBuilder.UseOpenIddict();
     }
 
     private void ApplyTimestamps()
@@ -167,6 +188,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             if (entry.State == EntityState.Added)
             {
                 entry.Entity.CreatedAt = now;
+                if (entry.Entity.MinecraftUuid == Guid.Empty)
+                {
+                    entry.Entity.MinecraftUuid = entry.Entity.Id;
+                }
             }
 
             if (entry.State is EntityState.Added or EntityState.Modified)
@@ -204,6 +229,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             if (entry.State is EntityState.Added or EntityState.Modified)
             {
                 entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<YggdrasilActivity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
             }
         }
     }

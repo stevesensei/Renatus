@@ -9,6 +9,7 @@ public enum SkinModel
 public sealed class Player
 {
     public Guid Id { get; set; }
+    public Guid MinecraftUuid { get; set; }
     public Guid UserId { get; set; }
     public User User { get; set; } = null!;
     public string Name { get; set; } = string.Empty;

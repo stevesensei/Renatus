@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
@@ -68,7 +69,13 @@ public static class DbSeed
             new ConfigurationSeed(AppConfigurationKeys.Site, siteOptions),
             new ConfigurationSeed(AppConfigurationKeys.LoginAnnouncement, loginAnnouncement),
             new ConfigurationSeed(AppConfigurationKeys.SiteAnnouncement, siteAnnouncement),
-            new ConfigurationSeed(AppConfigurationKeys.Yggdrasil, yggdrasilOptions)
+            new ConfigurationSeed(AppConfigurationKeys.Yggdrasil, yggdrasilOptions),
+            new ConfigurationSeed(AppConfigurationKeys.Union,
+                configuration.GetSection(UnionOptions.SectionName).Get<UnionOptions>() ?? new UnionOptions()),
+            new ConfigurationSeed(AppConfigurationKeys.UnionState, new UnionState()),
+            new ConfigurationSeed(AppConfigurationKeys.YggdrasilConnect,
+                configuration.GetSection(YggdrasilConnectOptions.SectionName).Get<YggdrasilConnectOptions>()
+                ?? new YggdrasilConnectOptions())
         };
 
         foreach (var seed in configurations)
@@ -83,6 +90,34 @@ public static class DbSeed
                 Key = seed.Key,
                 Value = JsonSerializer.Serialize(seed.Value, JsonOptions)
             });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await SeedPrivateKeysAsync(dbContext, cancellationToken);
+    }
+
+    private static async Task SeedPrivateKeysAsync(AppDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var keys = new[]
+        {
+            (AppConfigurationKeys.Yggdrasil, "signingPrivateKeyPem"),
+            (AppConfigurationKeys.Union, "oAuth2SigningPrivateKeyPem"),
+            (AppConfigurationKeys.YggdrasilConnect, "signingPrivateKeyPem"),
+            (AppConfigurationKeys.YggdrasilConnect, "encryptionPrivateKeyPem")
+        };
+        foreach (var (key, property) in keys)
+        {
+            var row = await dbContext.AppConfigurations.SingleAsync(entity => entity.Key == key, cancellationToken);
+            var value = JsonNode.Parse(row.Value, new JsonNodeOptions { PropertyNameCaseInsensitive = true })
+                as JsonObject ?? throw new InvalidOperationException($"Configuration '{key}' must be an object.");
+            if (!string.IsNullOrWhiteSpace(value[property]?.GetValue<string>()))
+            {
+                continue;
+            }
+
+            using var rsa = RSA.Create(2048);
+            value[property] = rsa.ExportPkcs8PrivateKeyPem();
+            row.Value = value.ToJsonString(JsonOptions);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
