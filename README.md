@@ -21,6 +21,22 @@ bug方面会慢慢修，我不是那种纯vibe coding选手，写出来的代码
 
 Docker部署？如果我用aspire的话或许好说，现在可能费点事
 
+## 注册邮箱域名限制
+
+在 `appsettings.json` 的 `Auth` 节中配置：
+
+```json
+"RegistrationEmailDomains": {
+  "Enabled": true,
+  "Mode": "Whitelist",
+  "Domains": ["s.hlju.edu.cn", "stu.hlju.edu.cn", "hlju.edu.cn"]
+}
+```
+
+`Enabled` 为 `false` 时关闭限制；`Mode` 支持 `Whitelist`（仅允许列表内域名）和 `Blacklist`（禁止列表内域名）。域名精确匹配、忽略大小写，可带或不带 `@` 前缀，不会自动包含子域名。白名单为空时禁止所有注册，黑名单为空时不限制域名。未配置此节时默认关闭限制；配置模板默认启用上述三个域名的白名单。
+
+该限制仅作用于注册，不影响已有用户登录或修改邮箱。修改配置后重启应用生效。
+
 ## 截图
 
 完全不会前端，拿AI糊的，不过还是可以的

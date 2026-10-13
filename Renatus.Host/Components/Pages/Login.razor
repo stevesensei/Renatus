@@ -22,7 +22,7 @@
             <MudText Typo="Typo.h3" id="auth-title">@(_registerMode ? L["site.createAccount"] : L["site.welcomeBack"])</MudText>
             <MudText Typo="Typo.body2" Class="renatus-muted mb-4">@(_registerMode ? L["site.joinCommunity"] : L["site.useAccountToContinue"])</MudText>
 
-            <MudTabs Elevation="0" Rounded="true" Centered="true" ActivePanelIndex="@ActivePanelIndex" ActivePanelIndexChanged="SetModeFromTab" Class="renatus-auth-tabs">
+            <MudTabs Elevation="0" Rounded="true" Centered="true" MinimumTabWidth="50%" ActivePanelIndex="@ActivePanelIndex" ActivePanelIndexChanged="SetModeFromTab" Class="renatus-auth-tabs">
                 <MudTabPanel Text='@L["site.login"]' />
                 <MudTabPanel Text='@L["site.register"]' />
             </MudTabs>

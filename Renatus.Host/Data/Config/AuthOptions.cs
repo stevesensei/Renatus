@@ -8,4 +8,5 @@ public sealed class AuthOptions
     public int JwtExpireDays { get; set; } = 3;
     public int SessionKeyTtlSeconds { get; set; } = 120;
     public int TimestampSkewSeconds { get; set; } = 120;
+    public RegistrationEmailDomainOptions RegistrationEmailDomains { get; set; } = new();
 }

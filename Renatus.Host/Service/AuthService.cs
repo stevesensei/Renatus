@@ -63,10 +63,6 @@ public sealed partial class AuthService(
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
-        var password = await ConsumeEncryptedPasswordAsync(request.SessionKeyId, request.EncryptedPassword, cancellationToken);
-        EnsurePasswordAllowed(password);
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-
         var username = request.Username.Trim();
         var email = request.Email.Trim();
         var nickName = string.IsNullOrWhiteSpace(request.NickName) ? username : request.NickName.Trim();
@@ -77,6 +73,11 @@ public sealed partial class AuthService(
         {
             throw new AuthException(StatusCodes.Status400BadRequest, "Username and email are required.");
         }
+
+        EnsureRegistrationEmailAllowed(email);
+        var password = await ConsumeEncryptedPasswordAsync(request.SessionKeyId, request.EncryptedPassword, cancellationToken);
+        EnsurePasswordAllowed(password);
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var exists = await dbContext.Users.AnyAsync(
             entity => entity.NormalizedUserName == normalizedUsername || entity.NormalizedEmail == normalizedEmail,
@@ -367,6 +368,34 @@ public sealed partial class AuthService(
         }
 
         return value;
+    }
+
+    private void EnsureRegistrationEmailAllowed(string email)
+    {
+        var restriction = options.Value.RegistrationEmailDomains;
+        if (!restriction.Enabled)
+        {
+            return;
+        }
+
+        if (!new EmailAddressAttribute().IsValid(email))
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "A valid email address is required.");
+        }
+
+        var domain = email[(email.LastIndexOf('@') + 1)..];
+        var listed = restriction.Domains.Any(value =>
+            string.Equals(domain, value.Trim().TrimStart('@'), StringComparison.OrdinalIgnoreCase));
+        var allowed = restriction.Mode switch
+        {
+            EmailDomainListMode.Whitelist => listed,
+            EmailDomainListMode.Blacklist => !listed,
+            _ => throw new InvalidOperationException("Invalid registration email domain list mode.")
+        };
+        if (!allowed)
+        {
+            throw new AuthException(StatusCodes.Status400BadRequest, "This email domain is not allowed for registration.");
+        }
     }
 
     private static void EnsurePasswordAllowed(string password)
