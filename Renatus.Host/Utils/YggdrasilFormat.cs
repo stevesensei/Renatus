@@ -45,6 +45,14 @@ public static partial class YggdrasilFormat
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
+    public static Guid CreateOfflinePlayerUuid(string playerName)
+    {
+        var bytes = MD5.HashData(Encoding.UTF8.GetBytes($"OfflinePlayer:{playerName}"));
+        bytes[6] = (byte)((bytes[6] & 0x0f) | 0x30);
+        bytes[8] = (byte)((bytes[8] & 0x3f) | 0x80);
+        return Guid.ParseExact(Convert.ToHexString(bytes), "N");
+    }
+
     [GeneratedRegex("^[0-9a-fA-F]{32}$")]
     private static partial Regex HexRegex();
 }

@@ -12,6 +12,7 @@ using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Service.Cache;
+using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
 using StackExchange.Redis;
 
@@ -23,7 +24,9 @@ public sealed partial class AuthService(
     IOptions<AuthOptions> options,
     ICacheService cacheService,
     IMapper mapper,
-    RegistrationVerificationService registrationVerificationService)
+    RegistrationVerificationService registrationVerificationService,
+    YggdrasilLifecycleService yggdrasilLifecycle,
+    UnionService unionService)
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
 
@@ -176,7 +179,8 @@ public sealed partial class AuthService(
             throw new AuthException(StatusCodes.Status409Conflict, "Email is already in use.");
         }
 
-        if (user.NormalizedEmail != normalizedEmail || !string.IsNullOrWhiteSpace(request.VerificationCode))
+        var emailChanged = user.NormalizedEmail != normalizedEmail;
+        if (emailChanged || !string.IsNullOrWhiteSpace(request.VerificationCode))
         {
             registrationVerificationService.EnsureEmailAllowed(email);
             await registrationVerificationService.VerifyAndConsumeAsync(email, request.VerificationCode, cancellationToken);
@@ -187,7 +191,16 @@ public sealed partial class AuthService(
         user.Email = email;
         user.NormalizedEmail = normalizedEmail;
         user.AvatarBase64 = avatarBase64;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            if (emailChanged)
+            {
+                await yggdrasilLifecycle.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return ToAccountProfileDto(user);
     }
@@ -221,7 +234,12 @@ public sealed partial class AuthService(
         }
 
         passwordMethod.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private async Task<string> ConsumeEncryptedPasswordAsync(
@@ -483,6 +501,9 @@ public sealed partial class AuthService(
             throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
         }
 
+        var originalEmail = user.NormalizedEmail;
+        var originalDisabled = user.IsDisabled;
+
         if (request.Role == UserRole.Player && user.Role == UserRole.Admin)
         {
             await EnsureAdminNotLastAsync(dbContext, userId, cancellationToken);
@@ -561,7 +582,17 @@ public sealed partial class AuthService(
             user.IsDisabled = request.IsDisabled.Value;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var credentialsChanged = user.NormalizedEmail != originalEmail || user.IsDisabled != originalDisabled;
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            if (credentialsChanged)
+            {
+                await yggdrasilLifecycle.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         return mapper.Map<AdminUserListItemDto>(user);
     }
 
@@ -590,7 +621,12 @@ public sealed partial class AuthService(
         }
 
         passwordMethod.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     public async Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken)
@@ -634,6 +670,8 @@ public sealed partial class AuthService(
             await cacheService.RemoveAsync(TextureLibraryService.PublicTextureCacheKey(textureId), cancellationToken);
             await cacheService.RemoveAsync(TextureLibraryService.PublicTexturePreviewCacheKey(textureId), cancellationToken);
         }
+
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
     }
 
     public async Task<int> CountUsersAsync(CancellationToken cancellationToken)

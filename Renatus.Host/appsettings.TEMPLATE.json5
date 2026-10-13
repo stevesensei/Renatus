@@ -19,19 +19,25 @@
     }
   },
   //PostgreSQL & Redis connection strings, please fill in your database connection information below.
+  //Redis uses logical database 1 (defaultDatabase=1) for Renatus cache data.
   //If you need more about connection string, please refer to https://www.npgsql.org/doc/connection-string-parameters.html.
   //PostgreSQL 和 Redis 的连接字符串，请在下方填写你的数据库连接信息。
   //如果你需要更多关于连接字符串的内容，请参考 https://www.npgsql.org/doc/connection-string-parameters.html。
   "ConnectionStrings": {
     "Default": "Host=<IP>;Port=<port>;Database=<DATABASE_NAME>;Username=<USERNAME>;Password=<PASSWORD>",
-    "Redis": "<IP>:6379,password=<PASSWORD,OPTIONAL>"
+    "Redis": "<IP>:6379,password=<PASSWORD,OPTIONAL>,defaultDatabase=1"
   },
   //此内容仅在初次启动时可用
   "Yggdrasil": {
     "PublicBaseUrl": "",
     "AccessTokenExpireHours": 24,
+    "RefreshTokenExpireHours": 168,
     "JoinSessionTtlSeconds": 30,
     "MaxProfileLookupCount": 100,
+    "MaxActiveSessions": 10,
+    "AuthenticationRateLimitMilliseconds": 1000,
+    "AuthServerEnabled": true,
+    "UuidAlgorithm": "v3",
     "ServerName": "HLJU Minecraft Auth Server",
     "ImplementationName": "Renatus",
     "ImplementationVersion": "0.1.0",
@@ -44,6 +50,7 @@
     "EnableProfileKey": false,
     "UsernameCheck": false,
     "SigningPrivateKeyPem": "",
+    "TextureSigningPrivateKeyPem": "",
     "SkinDomains": [],
     "DefaultSkinTextureId": null
   },

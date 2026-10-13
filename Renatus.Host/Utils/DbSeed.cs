@@ -101,6 +101,7 @@ public static class DbSeed
         var keys = new[]
         {
             (AppConfigurationKeys.Yggdrasil, "signingPrivateKeyPem"),
+            (AppConfigurationKeys.Yggdrasil, "textureSigningPrivateKeyPem"),
             (AppConfigurationKeys.Union, "oAuth2SigningPrivateKeyPem"),
             (AppConfigurationKeys.YggdrasilConnect, "signingPrivateKeyPem"),
             (AppConfigurationKeys.YggdrasilConnect, "encryptionPrivateKeyPem")

@@ -12,6 +12,7 @@ using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Service;
 using Renatus.Host.Service.Cache;
+using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -52,6 +53,7 @@ builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
 builder.Services.AddScoped<MailService>();
 builder.Services.AddScoped<RegistrationVerificationService>();
+builder.Services.AddUnionMemberServices();
 builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
@@ -117,7 +119,14 @@ using (var scope = app.Services.CreateScope())
 
 var appConfigurationService = app.Services.GetRequiredService<AppConfigurationService>();
 var yggdrasilOptions = await appConfigurationService.GetYggdrasilOptionsAsync(CancellationToken.None);
-app.Services.GetRequiredService<YggdrasilSigningKey>().Initialize(yggdrasilOptions.SigningPrivateKeyPem);
+var unionOptions = await appConfigurationService.GetUnionOptionsAsync(CancellationToken.None);
+var unionState = await appConfigurationService.GetUnionStateAsync(CancellationToken.None);
+var yggdrasilSigningKey = app.Services.GetRequiredService<YggdrasilSigningKey>();
+yggdrasilSigningKey.Initialize(yggdrasilOptions.SigningPrivateKeyPem);
+yggdrasilSigningKey.InitializeTexture(
+    unionOptions.Enabled && !string.IsNullOrWhiteSpace(unionState.TextureSigningPrivateKeyPem)
+        ? unionState.TextureSigningPrivateKeyPem
+        : yggdrasilOptions.TextureSigningPrivateKeyPem);
 
 //app.UseMiddleware<RequestResponseLoggingMiddleware>();
 

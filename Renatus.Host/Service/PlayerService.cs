@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Entity;
 using Renatus.Host.Service.Cache;
+using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
 
 namespace Renatus.Host.Service;
@@ -11,7 +12,10 @@ namespace Renatus.Host.Service;
 public sealed partial class PlayerService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     ICacheService cacheService,
-    IMapper mapper)
+    IMapper mapper,
+    AppConfigurationService configurationService,
+    YggdrasilLifecycleService yggdrasilLifecycle,
+    UnionService unionService)
 {
     private static readonly TimeSpan UserPlayersCacheTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan PlayerCacheTtl = TimeSpan.FromMinutes(5);
@@ -49,9 +53,13 @@ public sealed partial class PlayerService(
         await EnsureTextureTypeAsync(dbContext, user.Id, request.SkinTextureId, TextureType.Skin, cancellationToken);
         await EnsureTextureTypeAsync(dbContext, user.Id, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
+        var yggdrasilOptions = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var player = new Player
         {
             Id = Guid.NewGuid(),
+            MinecraftUuid = yggdrasilOptions.UuidAlgorithm == "v3"
+                ? YggdrasilFormat.CreateOfflinePlayerUuid(name)
+                : Guid.NewGuid(),
             UserId = user.Id,
             Name = name,
             NormalizedName = normalizedName,
@@ -71,6 +79,7 @@ public sealed partial class PlayerService(
         }
 
         await RemoveUserPlayersCacheAsync(user.Id, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return ToDto(player);
     }
 
@@ -178,9 +187,15 @@ public sealed partial class PlayerService(
             throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
         }
 
-        dbContext.Players.Remove(player);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+            dbContext.Players.Remove(player);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         await RemovePlayerCachesAsync(userId, playerId, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return new DeletePlayerResponse(playerId);
     }
 
@@ -340,6 +355,7 @@ public sealed partial class PlayerService(
         }
 
         var originalOwnerId = player.UserId;
+        var originalName = player.Name;
 
         if (request.Name is not null)
         {
@@ -408,13 +424,31 @@ public sealed partial class PlayerService(
             player.UserId = targetUserId;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var ownerChanged = player.UserId != originalOwnerId;
+        var nameChanged = player.Name != originalName;
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            if (ownerChanged)
+            {
+                await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         await RemovePlayerCachesAsync(originalOwnerId, playerId, cancellationToken);
-        if (player.UserId != originalOwnerId)
+        if (ownerChanged)
         {
             await RemovePlayerCachesAsync(player.UserId, playerId, cancellationToken);
         }
+
+        if (nameChanged)
+        {
+            await yggdrasilLifecycle.MarkPlayerRenamedAsync(player.MinecraftUuid, cancellationToken);
+        }
+
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
 
         return await GetPlayerDetailAsync(playerId, cancellationToken);
     }
@@ -429,9 +463,15 @@ public sealed partial class PlayerService(
         }
 
         var ownerId = player.UserId;
-        dbContext.Players.Remove(player);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+            dbContext.Players.Remove(player);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         await RemovePlayerCachesAsync(ownerId, playerId, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
     }
 
     public async Task<int> CountPlayersAsync(CancellationToken cancellationToken)
