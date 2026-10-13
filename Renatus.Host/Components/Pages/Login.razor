@@ -33,6 +33,8 @@
                     <LocalizedDataAnnotationsValidator />
                     <MudTextField @bind-Value="_registerForm.Username" Label='@L["site.username"]' For="@(() => _registerForm.Username)" Required="true" />
                     <MudTextField @bind-Value="_registerForm.Email" Label='@L["site.email"]' InputType="InputType.Email" For="@(() => _registerForm.Email)" Required="true" Class="mt-3" />
+                    <RegistrationCodeSender Email="@_registerForm.Email" Disabled="@_submitting" />
+                    <MudTextField @bind-Value="_registerForm.VerificationCode" Label='@L["site.verificationCode"]' For="@(() => _registerForm.VerificationCode)" Required="true" MaxLength="6" Class="mt-3" />
                     <MudTextField @bind-Value="_registerForm.NickName" Label='@L["site.nickname"]' For="@(() => _registerForm.NickName)" Class="mt-3" />
                     <MudTextField @bind-Value="_registerForm.Password" Label='@L["site.password"]' InputType="InputType.Password" For="@(() => _registerForm.Password)" Required="true" Class="mt-3" />
                     <ValidationSummary />
@@ -143,7 +145,8 @@
         var sessionKey = await AuthService.CreateSessionKeyAsync(CancellationToken.None);
         var encryptedPassword = EncryptPassword(sessionKey.PublicKey, form.Password);
         return await AuthService.RegisterAsync(
-            new RegisterRequest(sessionKey.SessionKeyId, form.Username, form.Email, form.NickName, encryptedPassword),
+            new RegisterRequest(sessionKey.SessionKeyId, form.Username, form.Email, form.NickName, encryptedPassword,
+                form.VerificationCode),
             CancellationToken.None);
     }
 

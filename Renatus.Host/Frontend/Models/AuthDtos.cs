@@ -13,6 +13,10 @@ public sealed class LoginForm
 
 public sealed class RegisterForm
 {
+    [Required(ErrorMessage = "validation.verificationCodeRequired")]
+    [RegularExpression("^[0-9]{6}$", ErrorMessage = "validation.verificationCodeInvalid")]
+    public string VerificationCode { get; set; } = string.Empty;
+
     [Required(ErrorMessage = "validation.usernameRequired")]
     [StringLength(64, ErrorMessage = "validation.usernameLength")]
     public string Username { get; set; } = string.Empty;

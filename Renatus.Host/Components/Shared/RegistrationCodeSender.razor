@@ -1,0 +1,92 @@
+@implements IDisposable
+@using System.Net
+@inject RegistrationVerificationService VerificationService
+
+<MudButton ButtonType="ButtonType.Button" Variant="Variant.Outlined" Color="Color.Primary"
+           Disabled="@(_sending || Disabled || _remainingSeconds > 0 || string.IsNullOrWhiteSpace(Email))"
+           OnClick="SendCode" Class="mt-3">
+    @(_sending ? L["site.sendingRegistrationCode"] : _remainingSeconds > 0
+        ? string.Format(L["site.resendRegistrationCode"], _remainingSeconds) : L["site.sendRegistrationCode"])
+</MudButton>
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-3" aria-live="polite">@_error</MudAlert>
+}
+else if (_sentEmail is not null)
+{
+    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-3" aria-live="polite">
+        <MudText Typo="Typo.body2">@L["site.registrationCodeSent"]</MudText>
+        <MudText Typo="Typo.body2" Class="renatus-verification-recipient">@_sentEmail</MudText>
+    </MudAlert>
+}
+
+@code {
+    [Parameter]
+    public string Email { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [CascadingParameter(Name = "ClientIp")]
+    public string? ClientIp { get; set; }
+
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _sending;
+    private int _remainingSeconds;
+    private string? _sentEmail;
+    private string? _error;
+
+    private async Task SendCode()
+    {
+        if (_sending || Disabled || _remainingSeconds > 0) return;
+        _sending = true;
+        _error = null;
+        _sentEmail = null;
+        var email = Email;
+        try
+        {
+            IPAddress.TryParse(ClientIp, out var clientIp);
+            var response = await VerificationService.SendAsync(email, clientIp, _lifetime.Token);
+            _sentEmail = email.Trim();
+            _remainingSeconds = response.ResendAfterSeconds;
+            _ = CountDownAsync();
+        }
+        catch (AuthException exception)
+        {
+            _error = exception.Message;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task CountDownAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        var token = _lifetime.Token;
+        try
+        {
+            while (_remainingSeconds > 0 && await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(() =>
+                {
+                    _remainingSeconds--;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+}
