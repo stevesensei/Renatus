@@ -14,9 +14,6 @@ using MudBlazor.Services;
 using Renatus.Host.Data;
 using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
-using Renatus.Host.Components;
-using Renatus.Host.Frontend.Services;
-using Renatus.Host.Middleware;
 using Renatus.Host.Service;
 using Renatus.Host.Service.Cache;
 using Renatus.Host.Utils;
@@ -43,10 +40,7 @@ builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOpt
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
-builder.Services.AddSingleton<LocalizationService>();
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<PendingAuthStore>();
-builder.Services.AddScoped<FrontendUserContext>();
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
@@ -168,44 +162,6 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.MapGet("/account/signin", async (PendingAuthStore store, HttpContext context, string? key, string? returnUrl) =>
-{
-    var response = store.Consume(key ?? string.Empty);
-    if (response is null)
-    {
-        return Results.Redirect("/login");
-    }
-
-    var claims = new[]
-    {
-        new Claim(ClaimTypes.NameIdentifier, response.User.Id.ToString()),
-        new Claim(ClaimTypes.Name, response.User.Username),
-        new Claim(ClaimTypes.GivenName, response.User.NickName),
-        new Claim(ClaimTypes.Role, response.User.Role.ToString()),
-    };
-
-    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-    var principal = new ClaimsPrincipal(identity);
-    var properties = new AuthenticationProperties
-    {
-        IsPersistent = true,
-        ExpiresUtc = response.ExpiresAt.UtcDateTime,
-    };
-    properties.StoreTokens(
-    [
-        new AuthenticationToken { Name = "access_token", Value = response.AccessToken }
-    ]);
-
-    await context.SignInAsync(
-        CookieAuthenticationDefaults.AuthenticationScheme,
-        principal,
-        properties);
-
-    return Results.Redirect(IsLocalUrl(returnUrl) ? returnUrl! : "/");
-});
 
 app.MapGet("/account/signout", async (HttpContext context) =>
 {

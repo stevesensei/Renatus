@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text.RegularExpressions;
 using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Renatus.Host.Data;
@@ -70,7 +71,7 @@ public sealed class MailService(IOptions<SmtpOptions> options, IHostEnvironment 
         var smtp = options.Value;
         if (string.IsNullOrWhiteSpace(smtp.Host)
             || smtp.Port is < 1 or > 65535
-            || !Enum.IsDefined(smtp.Security)
+            || !Enum.IsDefined(SecureSocketOptions.Auto)
             || string.IsNullOrWhiteSpace(smtp.Username)
             || string.IsNullOrWhiteSpace(smtp.Password)
             || string.IsNullOrWhiteSpace(smtp.FromEmail)
@@ -88,7 +89,7 @@ public sealed class MailService(IOptions<SmtpOptions> options, IHostEnvironment 
         message.Body = new TextPart("html") { Text = html };
 
         using var client = new SmtpClient();
-        await client.ConnectAsync(smtp.Host, smtp.Port, smtp.Security, cancellationToken);
+        await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.Auto, cancellationToken);
         await client.AuthenticateAsync(smtp.Username, smtp.Password, cancellationToken);
         await client.SendAsync(message, cancellationToken);
         await client.DisconnectAsync(true, cancellationToken);
