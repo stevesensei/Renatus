@@ -9,4 +9,5 @@ public sealed class AuthOptions
     public int SessionKeyTtlSeconds { get; set; } = 120;
     public int TimestampSkewSeconds { get; set; } = 120;
     public RegistrationEmailDomainOptions RegistrationEmailDomains { get; set; } = new();
+    public RegistrationVerificationOptions RegistrationVerification { get; set; } = new();
 }

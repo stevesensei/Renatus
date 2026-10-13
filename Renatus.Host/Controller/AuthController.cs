@@ -9,8 +9,29 @@ namespace Renatus.Host.Controller;
 
 [ApiController]
 [Route("/api/auth")]
-public sealed class AuthController(AuthService authService) : ControllerBase
+public sealed class AuthController(
+    AuthService authService,
+    RegistrationVerificationService registrationVerificationService) : ControllerBase
 {
+    [HttpPost("register-code")]
+    public async Task<GlobalResponse<RegistrationCodeResponse>> SendRegistrationCode(
+        SendRegistrationCodeRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await registrationVerificationService.SendAsync(
+                request.Email, HttpContext.Connection.RemoteIpAddress, cancellationToken);
+            return GlobalResponse<RegistrationCodeResponse>.Success(response);
+        }
+        catch (AuthException exception)
+        {
+            return exception.StatusCode >= 500
+                ? GlobalResponse<RegistrationCodeResponse>.Error(message: exception.Message)
+                : GlobalResponse<RegistrationCodeResponse>.ResultError(message: exception.Message);
+        }
+    }
+
     [HttpPost("session-key")]
     public async Task<GlobalResponse<SessionKeyResponse>> CreateSessionKey(CancellationToken cancellationToken)
     {

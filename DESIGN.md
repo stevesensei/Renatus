@@ -111,6 +111,11 @@ Renatus Front is a quiet gateway into a community: evening image-led public page
 - **Accessibility**: Chinese language declaration, semantic heading, selectable text code, decorative tables marked as presentation, and clear expiry/security guidance. Browser preview verifies layout; inbox-specific rendering requires the sending integration's own client checks.
 
 ## 6. Motion & Interaction
+### Registration verification
+- **Structure**: the existing registration form adds an outlined send-code button below the email field and a labelled six-digit verification field before the nickname/password fields. It reuses MudBlazor controls and existing spacing, surface, accent, and validation styles.
+- **States**: empty email, sending, sent with the destination email, resend countdown, send error, invalid/missing code, and registration busy. The send button never submits the registration form; the countdown ends automatically and stops when the component is disposed.
+- **Accessibility**: every field has a visible localized label, send results use inline live alerts, and disabled/busy states are communicated in text. The same stacked form layout remains usable on mobile, tablet, and desktop.
+
 - Buttons use MudBlazor's built-in hover, focus, and pressed states plus tokenized CSS transitions for panel lift.
 - The profile popover opens from the avatar with MudBlazor's anchored menu transition, closes on outside click or Escape, and keeps the avatar as the stable trigger. Reduced-motion users receive the same menu content without decorative transition emphasis.
 - Page surfaces use a short opacity/transform entry only where the existing shell permits it.

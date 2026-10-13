@@ -41,7 +41,17 @@ public sealed record RegisterRequest(
 
     [param: Required]
     [property: JsonPropertyName("encryptedPassword")]
-    string EncryptedPassword);
+    string EncryptedPassword,
+
+    [property: JsonPropertyName("verificationCode")]
+    string? VerificationCode);
+
+public sealed record SendRegistrationCodeRequest(
+    [property: JsonPropertyName("email")] string? Email);
+
+public sealed record RegistrationCodeResponse(
+    [property: JsonPropertyName("expiresAt")] DateTimeOffset ExpiresAt,
+    [property: JsonPropertyName("resendAfterSeconds")] int ResendAfterSeconds);
 
 public sealed record AuthResponse(
     [property: JsonPropertyName("accessToken")] string AccessToken,

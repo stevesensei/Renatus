@@ -61,6 +61,7 @@ builder.Services.AddScoped<TextureService>();
 builder.Services.AddScoped<TextureLibraryService>();
 builder.Services.AddScoped<SiteService>();
 builder.Services.AddScoped<MailService>();
+builder.Services.AddScoped<RegistrationVerificationService>();
 builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
 builder.Services.AddControllers().AddJsonOptions(options =>
 {

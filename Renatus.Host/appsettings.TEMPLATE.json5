@@ -55,6 +55,13 @@
     "SessionKeyTtlSeconds": 120,
     "TimestampSkewSeconds": 120,
     // 仅限制注册邮箱，不影响已有用户登录或修改邮箱。关闭时设 Enabled 为 false。
+    "RegistrationVerification": {
+      "CodeTtlMinutes": 5,
+      "EmailCooldownSeconds": 60,
+      "IpWindowSeconds": 3600,
+      "IpMaxRequests": 10,
+      "MaxVerificationAttempts": 5
+    },
     "RegistrationEmailDomains": {
       "Enabled": true,
       // Whitelist 只允许列表中的域名；Blacklist 禁止列表中的域名。

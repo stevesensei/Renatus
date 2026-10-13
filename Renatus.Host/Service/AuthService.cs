@@ -22,7 +22,8 @@ public sealed partial class AuthService(
     IConnectionMultiplexer connectionMultiplexer,
     IOptions<AuthOptions> options,
     ICacheService cacheService,
-    IMapper mapper)
+    IMapper mapper,
+    RegistrationVerificationService registrationVerificationService)
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
 
@@ -64,7 +65,7 @@ public sealed partial class AuthService(
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var username = request.Username.Trim();
-        var email = request.Email.Trim();
+        var email = registrationVerificationService.EnsureEmailAllowed(request.Email);
         var nickName = string.IsNullOrWhiteSpace(request.NickName) ? username : request.NickName.Trim();
         var normalizedUsername = YggdrasilFormat.Normalize(username);
         var normalizedEmail = YggdrasilFormat.Normalize(email);
@@ -74,7 +75,7 @@ public sealed partial class AuthService(
             throw new AuthException(StatusCodes.Status400BadRequest, "Username and email are required.");
         }
 
-        EnsureRegistrationEmailAllowed(email);
+        RegistrationVerificationService.EnsureCodeFormat(request.VerificationCode);
         var password = await ConsumeEncryptedPasswordAsync(request.SessionKeyId, request.EncryptedPassword, cancellationToken);
         EnsurePasswordAllowed(password);
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -86,6 +87,8 @@ public sealed partial class AuthService(
         {
             throw new AuthException(StatusCodes.Status409Conflict, "Username or email already exists.");
         }
+
+        await registrationVerificationService.VerifyAndConsumeAsync(email, request.VerificationCode, cancellationToken);
 
         var user = new User
         {
@@ -368,34 +371,6 @@ public sealed partial class AuthService(
         }
 
         return value;
-    }
-
-    private void EnsureRegistrationEmailAllowed(string email)
-    {
-        var restriction = options.Value.RegistrationEmailDomains;
-        if (!restriction.Enabled)
-        {
-            return;
-        }
-
-        if (!new EmailAddressAttribute().IsValid(email))
-        {
-            throw new AuthException(StatusCodes.Status400BadRequest, "A valid email address is required.");
-        }
-
-        var domain = email[(email.LastIndexOf('@') + 1)..];
-        var listed = restriction.Domains.Any(value =>
-            string.Equals(domain, value.Trim().TrimStart('@'), StringComparison.OrdinalIgnoreCase));
-        var allowed = restriction.Mode switch
-        {
-            EmailDomainListMode.Whitelist => listed,
-            EmailDomainListMode.Blacklist => !listed,
-            _ => throw new InvalidOperationException("Invalid registration email domain list mode.")
-        };
-        if (!allowed)
-        {
-            throw new AuthException(StatusCodes.Status400BadRequest, "This email domain is not allowed for registration.");
-        }
     }
 
     private static void EnsurePasswordAllowed(string password)
