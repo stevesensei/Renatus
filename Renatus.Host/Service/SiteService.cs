@@ -37,7 +37,10 @@ public sealed class SiteService(AppConfigurationService configurationService)
                 siteAnnouncement.Title.Trim(),
                 siteAnnouncement.Body.Trim(),
                 siteAnnouncement.Image.Trim()),
-            buttons);
+            buttons,
+            AppConfigurationService.NormalizePublicBaseUrl(site.PublicBaseUrl),
+            site.Copyright.Trim(),
+            site.IcpRegistrationNumber.Trim());
     }
 
     private static string? NormalizeOptional(string? value)

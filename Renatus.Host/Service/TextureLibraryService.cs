@@ -95,6 +95,44 @@ public sealed class TextureLibraryService(
         return new PublicTexturePageResponse(textures, page, pageSize, totalCountValue, totalPages);
     }
 
+    public async Task<PublicTexturePageResponse> GetFilteredPublicTexturesAsync(
+        PublicTextureQuery query, Guid? userId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query.Search) && query.Type is null)
+            return await GetPublicTexturesAsync(query.Page, query.PageSize, userId, cancellationToken);
+        var pageSize = Math.Clamp(query.PageSize, 1, 24);
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var textures = context.Textures.AsNoTracking().Include(texture => texture.User)
+            .Where(texture => texture.IsPublic);
+        if (query.Type is not null) textures = textures.Where(texture => texture.Type == query.Type);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var pattern = "%" + query.Search.Trim().Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+            textures = textures.Where(texture => EF.Functions.ILike(texture.Name, pattern)
+                || (texture.User != null && EF.Functions.ILike(texture.User.NickName, pattern)));
+        }
+        var count = await textures.CountAsync(cancellationToken);
+        var totalPages = (count + pageSize - 1) / pageSize;
+        var page = Math.Clamp(query.Page, 1, Math.Max(1, totalPages));
+        var records = await textures.OrderByDescending(texture => texture.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToArrayAsync(cancellationToken);
+        var favorites = await GetFavoriteTextureIdsAsync(context, userId, cancellationToken);
+        return new PublicTexturePageResponse(records.Select(texture => ToPublicDto(texture)
+            with { IsFavorited = favorites.Contains(texture.Id) }).ToArray(), page, pageSize, count, totalPages);
+    }
+
+    public async Task<TexturePreviewDto?> GetPreviewAsync(
+        Guid textureId, Guid? userId, CancellationToken cancellationToken)
+    {
+        var result = await GetPublicPreviewAsync(textureId, userId, cancellationToken);
+        if (result is not null || userId is null) return result;
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var owned = await context.Textures.AsNoTracking().Include(texture => texture.User)
+            .FirstOrDefaultAsync(texture => texture.Id == textureId && texture.UserId == userId
+                && texture.User != null && !texture.User.IsDisabled, cancellationToken);
+        return owned is null ? null : ToPreviewDto(owned) with { IsFavorited = true };
+    }
+
     public async Task<TexturePreviewDto?> GetPublicPreviewAsync(
         Guid textureId,
         Guid? userId,

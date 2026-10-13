@@ -9,6 +9,8 @@ public sealed class SiteOptions
     public string Description { get; set; } = "Minecraft authentication for your community.";
     public string PublicBaseUrl { get; set; } = "https://localhost";
     public List<SiteButtonOptions> Buttons { get; set; } = [];
+    public string Copyright { get; set; } = "";
+    public string IcpRegistrationNumber { get; set; } = "";
 }
 
 public sealed class SiteAnnouncementOptions

@@ -9,3 +9,8 @@ npm-debug.log*
 /Renatus.Host/appsettings.Development.json
 /Renatus.Host/appsettings.json
 /.idea
+/Renatus.Host/wwwroot/assets/
+/Renatus.Host/wwwroot/index.html
+/Renatus.Host/wwwroot/skins/renatus-cape.png
+/Renatus.Host/wwwroot/logo.png
+/Renatus.Host/wwwroot/icon.svg
