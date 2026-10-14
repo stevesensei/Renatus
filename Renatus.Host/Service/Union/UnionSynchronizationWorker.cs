@@ -4,6 +4,7 @@ internal sealed class UnionSynchronizationWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<UnionSynchronizationWorker> logger) : BackgroundService
 {
+    /// <summary>Reconciles on startup and every 30 seconds, so committed CRUD reaches an unavailable center when it recovers.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
@@ -14,6 +15,7 @@ internal sealed class UnionSynchronizationWorker(
         }
     }
 
+    /// <summary>Creates a fresh scope per attempt; a failure preserves service retry state and cannot terminate future reconciliation.</summary>
     private async Task ReconcileAsync(CancellationToken cancellationToken)
     {
         try
@@ -27,7 +29,8 @@ internal sealed class UnionSynchronizationWorker(
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Union profile reconciliation failed and will be retried.");
+            logger.LogWarning("Union profile reconciliation failed ({ErrorType}) and will be retried.", exception.GetType().Name);
         }
     }
 }
+

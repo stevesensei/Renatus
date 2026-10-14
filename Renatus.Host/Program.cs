@@ -46,6 +46,7 @@ builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 builder.Services.AddSingleton<AppConfigurationService>();
 builder.Services.AddSingleton<YggdrasilSigningKey>();
 builder.Services.AddScoped<YggdrasilService>();
+builder.Services.AddScoped<YggdrasilLifecycleService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<TextureService>();

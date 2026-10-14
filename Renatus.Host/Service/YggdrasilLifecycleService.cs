@@ -1,56 +1,74 @@
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
-using StackExchange.Redis;
+using Renatus.Host.Entity;
 
 namespace Renatus.Host.Service;
 
-public sealed class YggdrasilLifecycleService(
-    IConnectionMultiplexer redis,
-    AppConfigurationService configurationService)
+public sealed class YggdrasilLifecycleService
 {
-    private readonly IDatabase _database = redis.GetDatabase();
+    /// <summary>Locks the account before changing credentials or issuing sessions, so a concurrent login cannot bypass hard revocation.</summary>
+    public async Task LockUserAsync(AppDbContext dbContext, Guid userId, CancellationToken cancellationToken)
+    {
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"Users\" WHERE \"Id\" = {userId} FOR UPDATE", cancellationToken);
+    }
 
-    public Task<int> RevokeUserClientsAsync(
+    /// <summary>Locks all involved accounts in PostgreSQL ID order before clients or players; transfers lock both owners so authentication cannot create a session during ownership changes.</summary>
+    public async Task LockUsersAsync(AppDbContext dbContext, IEnumerable<Guid> userIds, CancellationToken cancellationToken)
+    {
+        var ids = userIds.Distinct().ToArray();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY ({ids}) ORDER BY \"Id\" FOR UPDATE", cancellationToken);
+    }
+
+    /// <summary>Locks the account then its clients in database ID order and revokes usable/refreshable tokens in the caller's credential-change transaction.</summary>
+    public async Task<int> RevokeUserClientsAsync(
         AppDbContext dbContext,
         Guid userId,
         CancellationToken cancellationToken)
     {
-        return dbContext.YggdrasilClients
+        await LockUserAsync(dbContext, userId, cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"YggdrasilClients\" WHERE \"UserId\" = {userId} ORDER BY \"Id\" FOR UPDATE", cancellationToken);
+        return await dbContext.YggdrasilClients
             .Where(client => client.UserId == userId)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(client => client.Version, client => client.Version + 1),
+                setters => setters.SetProperty(client => client.Version, client => client.Version + 1)
+                    .SetProperty(client => client.LastUsedAt, DateTimeOffset.UnixEpoch),
                 cancellationToken);
     }
 
-    public Task<int> RevokePlayerClientsAsync(
+    /// <summary>After the caller locks the affected accounts, locks bound clients in PostgreSQL ID order before player mutation and revokes their versions; join snapshots also check the version.</summary>
+    public async Task<int> RevokePlayerClientsAsync(
         AppDbContext dbContext,
         Guid playerId,
         CancellationToken cancellationToken)
     {
-        return dbContext.YggdrasilClients
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"YggdrasilClients\" WHERE \"PlayerId\" = {playerId} ORDER BY \"Id\" FOR UPDATE", cancellationToken);
+        return await dbContext.YggdrasilClients
             .Where(client => client.PlayerId == playerId)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(client => client.Version, client => client.Version + 1),
+                setters => setters.SetProperty(client => client.Version, client => client.Version + 1)
+                    .SetProperty(client => client.LastUsedAt, DateTimeOffset.UnixEpoch),
                 cancellationToken);
     }
 
-    public async Task MarkPlayerRenamedAsync(Guid minecraftUuid, CancellationToken cancellationToken)
+    /// <summary>Records a soft rename in the same database transaction as the player change without revoking the refresh window.</summary>
+    public void MarkPlayerRenamed(AppDbContext dbContext, Player player)
     {
-        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
-        await _database.StringSetAsync(
-            RenameKey(minecraftUuid),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            TimeSpan.FromHours(options.RefreshTokenExpireHours));
+        dbContext.YggdrasilActivities.Add(new YggdrasilActivity
+        {
+            Id = Guid.NewGuid(), Action = "profile.rename", PlayerId = player.Id, UserId = player.UserId
+        });
     }
 
-    public async Task<long?> GetPlayerRenamedAtAsync(Guid minecraftUuid)
+    /// <summary>Reads the committed rename boundary using the internal player key; usable tokens at or before it fail while refresh remains allowed.</summary>
+    public async Task<long?> GetPlayerRenamedAtAsync(AppDbContext dbContext, Guid playerId, CancellationToken cancellationToken)
     {
-        var value = await _database.StringGetAsync(RenameKey(minecraftUuid));
-        return value.TryParse(out long milliseconds) ? milliseconds : null;
-    }
-
-    private static string RenameKey(Guid minecraftUuid)
-    {
-        return $"yggdrasil:player-renamed:{minecraftUuid:N}";
+        var renamedAt = await dbContext.YggdrasilActivities.AsNoTracking()
+            .Where(activity => activity.PlayerId == playerId && activity.Action == "profile.rename")
+            .Select(activity => (DateTimeOffset?)activity.CreatedAt).MaxAsync(cancellationToken);
+        return renamedAt?.ToUnixTimeMilliseconds();
     }
 }

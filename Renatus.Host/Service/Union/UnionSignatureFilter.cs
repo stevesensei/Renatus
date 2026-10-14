@@ -11,6 +11,7 @@ public sealed partial class UnionSignatureFilter(UnionSignatureVerifier signatur
     private const int MaximumBodyBytes = 1024 * 1024;
     private const int MaximumSignatureLength = 4096;
 
+    /// <summary>Checks single bounded signature headers and the past-10/future-30-second window, buffers at most 1 MiB of raw bytes, and authenticates before model binding.</summary>
     public async Task OnResourceExecutionAsync(
         ResourceExecutingContext context,
         ResourceExecutionDelegate next)
@@ -92,3 +93,4 @@ public sealed partial class UnionSignatureFilter(UnionSignatureVerifier signatur
     [GeneratedRegex("^[A-Za-z0-9_-]{1,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex NonceRegex();
 }
+

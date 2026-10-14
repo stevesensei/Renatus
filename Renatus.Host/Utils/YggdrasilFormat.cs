@@ -45,6 +45,7 @@ public static partial class YggdrasilFormat
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
+    /// <summary>Matches Java nameUUIDFromBytes for UTF-8 OfflinePlayer:name: MD5 plus RFC version 3/variant bits, parsed as network-order hex to avoid Guid byte-endian reversal.</summary>
     public static Guid CreateOfflinePlayerUuid(string playerName)
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes($"OfflinePlayer:{playerName}"));

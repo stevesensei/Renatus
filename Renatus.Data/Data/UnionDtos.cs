@@ -16,10 +16,10 @@ public sealed record UnionRemapRequest(
     [property: JsonPropertyName("remapped_uuid")] Dictionary<string, string> RemappedUuid);
 
 public sealed record UnionDiagnoseRequest(
-    [property: JsonPropertyName("nonce")] JsonElement Nonce);
+    [property: JsonPropertyName("nonce")] JsonElement? Nonce);
 
 public sealed record UnionDiagnoseResponse(
-    [property: JsonPropertyName("nonce")] JsonElement Nonce,
+    [property: JsonPropertyName("nonce"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] JsonElement? Nonce,
     [property: JsonPropertyName("timestamp")] double Timestamp);
 
 public sealed record UnionEmailResponse(
@@ -65,3 +65,4 @@ public sealed record UnionHostMetadataResponse(
 
 public sealed record UnionProfileSyncRequest(
     [property: JsonPropertyName("profileList")] Dictionary<string, string> ProfileList);
+

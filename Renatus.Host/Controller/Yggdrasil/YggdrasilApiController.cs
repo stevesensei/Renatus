@@ -8,7 +8,9 @@ namespace Renatus.Host.Controller.Yggdrasil;
 [Route("api/yggdrasil/api")]
 public sealed class YggdrasilApiController(YggdrasilService yggdrasilService) : YggdrasilControllerBase
 {
+    /// <summary>Shares the bounded normalized name lookup between legacy and minecraftservices routes and returns Minecraft UUIDs.</summary>
     [HttpPost("profiles/minecraft")]
+    [HttpPost("/api/yggdrasil/minecraftservices/minecraft/profile/lookup/bulk/byname")]
     public async Task<ActionResult<IReadOnlyCollection<PlayerNameToIdResponse>>> ProfilesMinecraft(
         IReadOnlyCollection<string> playerNames,
         CancellationToken cancellationToken)
@@ -23,7 +25,9 @@ public sealed class YggdrasilApiController(YggdrasilService yggdrasilService) : 
         }
     }
 
+    /// <summary>Uses the same public Minecraft UUID lookup for both protocol aliases without frontend Bearer authentication.</summary>
     [HttpGet("users/profiles/minecraft/{playerName}")]
+    [HttpGet("/api/yggdrasil/minecraftservices/minecraft/profile/lookup/name/{playerName}")]
     public async Task<ActionResult<PlayerNameToIdResponse>> UserProfileMinecraft(
         string playerName,
         CancellationToken cancellationToken)

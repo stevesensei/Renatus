@@ -145,6 +145,7 @@ public sealed partial class AuthService(
         return ToAccountProfileDto(user);
     }
 
+    /// <summary>Commits verified email changes with hard Yggdrasil revocation; the frontend account response retains its own JWT/envelope boundary.</summary>
     public async Task<AccountProfileDto> UpdateAccountProfileAsync(
         Guid userId,
         UpdateAccountProfileRequest request,
@@ -202,9 +203,11 @@ public sealed partial class AuthService(
             await transaction.CommitAsync(cancellationToken);
         }
 
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return ToAccountProfileDto(user);
     }
 
+    /// <summary>Changes the password and revokes usable/refreshable Yggdrasil versions in one database transaction.</summary>
     public async Task ChangePasswordAsync(
         Guid userId,
         ChangePasswordRequest request,
@@ -489,6 +492,7 @@ public sealed partial class AuthService(
         return mapped;
     }
 
+    /// <summary>Commits email or disable changes with hard Yggdrasil revocation, then marks the Union snapshot for recoverable synchronization.</summary>
     public async Task<AdminUserListItemDto> UpdateUserAsync(
         Guid userId,
         AdminUpdateUserRequest request,
@@ -593,9 +597,11 @@ public sealed partial class AuthService(
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return mapper.Map<AdminUserListItemDto>(user);
     }
 
+    /// <summary>Applies an administrator password reset and hard-revokes all Yggdrasil client versions in the same transaction.</summary>
     public async Task ResetPasswordAsync(Guid userId, string newPassword, CancellationToken cancellationToken)
     {
         EnsurePasswordAllowed(newPassword);
@@ -629,6 +635,7 @@ public sealed partial class AuthService(
         }
     }
 
+    /// <summary>Locks the account then all owned or bound-to-owned-player clients in ID order before revocation/cascade deletion, including revoked former-owner rows; cache invalidation and Union reconciliation follow commit.</summary>
     public async Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -642,6 +649,12 @@ public sealed partial class AuthService(
         {
             await EnsureAdminNotLastAsync(dbContext, userId, cancellationToken);
         }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await yggdrasilLifecycle.LockUserAsync(dbContext, userId, cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"YggdrasilClients\" WHERE \"UserId\" = {userId} OR \"PlayerId\" IN (SELECT \"Id\" FROM \"Players\" WHERE \"UserId\" = {userId}) ORDER BY \"Id\" FOR UPDATE", cancellationToken);
+        await yggdrasilLifecycle.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
 
         var textureIds = await dbContext.Textures
             .AsNoTracking()
@@ -657,6 +670,7 @@ public sealed partial class AuthService(
 
         dbContext.Users.Remove(user);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         await cacheService.RemoveAsync(PlayerService.UserPlayersCacheKey(userId), cancellationToken);
         foreach (var playerId in playerIds)

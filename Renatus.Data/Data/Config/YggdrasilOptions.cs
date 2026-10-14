@@ -23,6 +23,7 @@ public sealed class YggdrasilOptions
     public bool EnableProfileKey { get; set; }
     public bool UsernameCheck { get; set; }
     public string SigningPrivateKeyPem { get; set; } = "";
+    /// <summary>Persistent local texture signer; Union may replace the active texture key without changing this key or the local JWT signer.</summary>
     public string TextureSigningPrivateKeyPem { get; set; } = "";
     public string[] SkinDomains { get; set; } = [];
     public Guid? DefaultSkinTextureId { get; set; }

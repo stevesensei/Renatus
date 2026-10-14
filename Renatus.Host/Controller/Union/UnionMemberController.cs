@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Renatus.Host.Data;
 using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
@@ -10,12 +9,15 @@ namespace Renatus.Host.Controller.Union;
 [Route("api/union/member")]
 public sealed class UnionMemberController(UnionService unionService) : ControllerBase
 {
+    /// <summary>Returns public PHP-compatible member metadata; no member key, email, or private material is exposed.</summary>
     [HttpGet]
     public Task<UnionMemberInfoResponse> Get(CancellationToken cancellationToken)
     {
+        Response.Headers.AccessControlAllowOrigin = "*";
         return unionService.GetMemberInfoAsync(cancellationToken);
     }
 
+    /// <summary>Signed callback refreshes the complete center directory; success uses the protocol 204 response.</summary>
     [HttpPost("updatelist")]
     [ServiceFilter<UnionSignatureFilter>]
     public Task<IActionResult> UpdateList(CancellationToken cancellationToken)
@@ -24,6 +26,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             () => unionService.UpdateServerListAsync(cancellationToken));
     }
 
+    /// <summary>Signed callback updates shared texture signing material while preserving frontend and Yggdrasil login keys.</summary>
     [HttpPost("updateprivatekey")]
     [ServiceFilter<UnionSignatureFilter>]
     public Task<IActionResult> UpdatePrivateKey(CancellationToken cancellationToken)
@@ -32,6 +35,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             () => unionService.UpdatePrivateKeyAsync(cancellationToken));
     }
 
+    /// <summary>Signed callback accepts the exact PHP key field as a write-only outgoing member secret.</summary>
     [HttpPost("updatebackendkey")]
     [ServiceFilter<UnionSignatureFilter>]
     public Task<IActionResult> UpdateBackendKey(
@@ -42,6 +46,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             () => unionService.UpdateMemberKeyAsync(request.Key, cancellationToken));
     }
 
+    /// <summary>Signed callback requests a full snapshot; center failures leave dirty state available for background retries.</summary>
     [HttpPost("sync")]
     [ServiceFilter<UnionSignatureFilter>]
     public Task<IActionResult> Sync(CancellationToken cancellationToken)
@@ -50,6 +55,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             () => unionService.SynchronizeProfilesAsync(true, cancellationToken));
     }
 
+    /// <summary>Signed callback applies the complete remapped_uuid batch atomically; conflicts reject every mapping.</summary>
     [HttpPost("remapuuid")]
     [ServiceFilter<UnionSignatureFilter>]
     public Task<IActionResult> RemapUuid(
@@ -60,6 +66,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             () => unionService.ApplyRemapAsync(request.RemappedUuid, cancellationToken));
     }
 
+    /// <summary>Signed center-only email lookup uses a normalized player name and returns 204 when no player matches.</summary>
     [HttpGet("queryemail")]
     [ServiceFilter<UnionSignatureFilter>]
     public async Task<IActionResult> QueryEmail(
@@ -77,6 +84,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
         }
     }
 
+    /// <summary>Signed diagnostic echoes the supplied JSON nonce and current fractional Unix seconds, matching PHP.</summary>
     [HttpPost("diagnose")]
     [ServiceFilter<UnionSignatureFilter>]
     public IActionResult Diagnose(UnionDiagnoseRequest request)
@@ -86,6 +94,7 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d));
     }
 
+    /// <summary>Maps business failures to safe Union protocol HTTP errors instead of frontend response envelopes.</summary>
     private async Task<IActionResult> ExecuteNoContentAsync(Func<Task> action)
     {
         try
@@ -104,3 +113,4 @@ public sealed class UnionMemberController(UnionService unionService) : Controlle
         return StatusCode(exception.StatusCode, new { error = exception.Message });
     }
 }
+

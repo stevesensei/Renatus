@@ -53,11 +53,19 @@ public sealed class YggdrasilAuthController(YggdrasilService yggdrasilService) :
         }
     }
 
+    /// <summary>Returns Mojang-shaped authserver policy errors while preserving idempotent 204 for token invalidation.</summary>
     [HttpPost("invalidate")]
     public async Task<IActionResult> Invalidate(InvalidateRequest request, CancellationToken cancellationToken)
     {
-        await yggdrasilService.InvalidateAsync(request, cancellationToken);
-        return NoContent();
+        try
+        {
+            await yggdrasilService.InvalidateAsync(request, cancellationToken);
+            return NoContent();
+        }
+        catch (YggdrasilException exception)
+        {
+            return YggdrasilError(exception);
+        }
     }
 
     [HttpPost("signout")]

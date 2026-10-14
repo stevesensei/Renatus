@@ -66,6 +66,7 @@ public sealed partial class AppConfigurationService(
         return UpdateAnnouncementAsync(AppConfigurationKeys.SiteAnnouncement, options, cancellationToken);
     }
 
+    /// <summary>Derives local public links and merges Union bs_root hosts only while enabled; private signing settings remain internal and bounded protocol settings are checked.</summary>
     public async Task<YggdrasilOptions> GetYggdrasilOptionsAsync(CancellationToken cancellationToken)
     {
         var siteTask = GetSiteOptionsAsync(cancellationToken);
@@ -101,6 +102,7 @@ public sealed partial class AppConfigurationService(
         return yggdrasil;
     }
 
+    /// <summary>Bounds usable/refreshable lifetimes, session caps, atomic authentication intervals and UUID creation algorithms before runtime use.</summary>
     private static void ValidateYggdrasilOptions(YggdrasilOptions options)
     {
         if (options.AccessTokenExpireHours is < 1 or > 720

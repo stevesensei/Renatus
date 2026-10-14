@@ -12,6 +12,7 @@ namespace Renatus.Host.Controller.Union;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
 public sealed class UnionAdminController(UnionService unionService) : ControllerBase
 {
+    /// <summary>Frontend Admin Bearer JWT only; returns safe sync/key versions without secrets or upstream payloads.</summary>
     [HttpGet("status")]
     public async Task<GlobalResponse<UnionAdminStatusResponse>> Status(CancellationToken cancellationToken)
     {
@@ -19,6 +20,7 @@ public sealed class UnionAdminController(UnionService unionService) : Controller
             await unionService.GetStatusAsync(cancellationToken));
     }
 
+    /// <summary>Exposes a hasMemberKey indicator; persisted member and signing keys remain write-only.</summary>
     [HttpGet("settings")]
     public async Task<GlobalResponse<UnionAdminSettingsResponse>> Settings(CancellationToken cancellationToken)
     {
@@ -26,6 +28,7 @@ public sealed class UnionAdminController(UnionService unionService) : Controller
             await unionService.GetSettingsAsync(cancellationToken));
     }
 
+    /// <summary>Updates bounded settings, retaining an omitted secret; frontend business failures remain HTTP 200 GlobalResponse envelopes.</summary>
     [HttpPut("settings")]
     public async Task<GlobalResponse<UnionAdminSettingsResponse>> UpdateSettings(
         UnionAdminUpdateSettingsRequest request,
@@ -42,24 +45,28 @@ public sealed class UnionAdminController(UnionService unionService) : Controller
         }
     }
 
+    /// <summary>Admin-triggered validated center directory refresh, using the frontend response contract.</summary>
     [HttpPost("updatelist")]
     public Task<GlobalResponse<object>> UpdateList(CancellationToken cancellationToken)
     {
         return ExecuteAsync(() => unionService.UpdateServerListAsync(cancellationToken));
     }
 
+    /// <summary>Admin-triggered texture-only key refresh; successful responses contain no private material.</summary>
     [HttpPost("updateprivatekey")]
     public Task<GlobalResponse<object>> UpdatePrivateKey(CancellationToken cancellationToken)
     {
         return ExecuteAsync(() => unionService.UpdatePrivateKeyAsync(cancellationToken));
     }
 
+    /// <summary>Forces a full UUID/name snapshot while retaining retry state if the center is offline.</summary>
     [HttpPost("sync")]
     public Task<GlobalResponse<object>> Sync(CancellationToken cancellationToken)
     {
         return ExecuteAsync(() => unionService.SynchronizeProfilesAsync(true, cancellationToken));
     }
 
+    /// <summary>Returns only center operation status; upstream headers and response bodies are intentionally withheld.</summary>
     [HttpPost("diagnose")]
     public async Task<GlobalResponse<UnionAdminOperationResponse>> Diagnose(
         CancellationToken cancellationToken)
@@ -77,6 +84,7 @@ public sealed class UnionAdminController(UnionService unionService) : Controller
         }
     }
 
+    /// <summary>Converts safe Union business errors into the application envelope without forwarding protocol HTTP statuses.</summary>
     private static async Task<GlobalResponse<object>> ExecuteAsync(Func<Task> action)
     {
         try
@@ -90,3 +98,4 @@ public sealed class UnionAdminController(UnionService unionService) : Controller
         }
     }
 }
+

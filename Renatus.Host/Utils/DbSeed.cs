@@ -96,6 +96,7 @@ public static class DbSeed
         await SeedPrivateKeysAsync(dbContext, cancellationToken);
     }
 
+    /// <summary>Generates missing private keys once in database configuration, keeping the local JWT signer and local texture signer distinct across restarts and Union key updates.</summary>
     private static async Task SeedPrivateKeysAsync(AppDbContext dbContext, CancellationToken cancellationToken)
     {
         var keys = new[]
