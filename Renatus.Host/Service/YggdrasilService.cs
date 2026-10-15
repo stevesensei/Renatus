@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -7,6 +8,7 @@ using Renatus.Host.Data.Config;
 using Renatus.Host.Entity;
 using Renatus.Host.Service.Cache;
 using Renatus.Host.Utils;
+using StackExchange.Redis;
 
 namespace Renatus.Host.Service;
 
@@ -14,22 +16,69 @@ public sealed partial class YggdrasilService(
     AppDbContext dbContext,
     YggdrasilSigningKey signingKey,
     ICacheService cacheService,
-    AppConfigurationService configurationService)
+    AppConfigurationService configurationService,
+    YggdrasilLifecycleService lifecycleService,
+    TextureService textureService,
+    PlayerService playerService,
+    IConnectionMultiplexer redis,
+    YggdrasilConnectOptions startupConnectOptions,
+    ILogger<YggdrasilService> logger)
 {
+    private readonly IDatabase _database = redis.GetDatabase();
     #region Auth
 
+    /// <summary>Issues local RS256 tokens under the initially resolved account lock; rechecks credentials and account identity so a transferred player alias cannot switch owners while waiting and bypass session/revocation serialization. Redis NX bounds login/signout frequency.</summary>
     public async Task<AuthenticateResponse> AuthenticateAsync(AuthenticateRequest request, CancellationToken cancellationToken)
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
-        var (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
+        EnsureAuthServerEnabled(options);
+        var (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "登录初次校验");
+        if (user.Players.Count == 0)
+        {
+            throw new YggdrasilException(
+                StatusCodes.Status403Forbidden, "ForbiddenOperationException", "User has no available profiles.");
+        }
+
+        await ApplyAuthenticationRateLimitAsync(user.Id, options);
+        var lockedUserId = user.Id;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await lifecycleService.LockUserAsync(dbContext, lockedUserId, cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "登录加锁后复核");
+        if (user.Id != lockedUserId)
+        {
+            logger.LogWarning(
+                "Yggdrasil 登录失败：加锁后账户身份发生变化。登录标识={Login}，原账户ID={LockedUserId}，当前账户ID={UserId}，角色ID={PlayerId}，追踪ID={TraceId}",
+                JsonSerializer.Serialize(request.Username), lockedUserId, user.Id, selectedPlayer?.Id, Activity.Current?.Id);
+            throw YggdrasilException.InvalidCredentials();
+        }
         var clientToken = string.IsNullOrWhiteSpace(request.ClientToken)
             ? Guid.NewGuid().ToString("N")
             : request.ClientToken;
+        if (clientToken.Length > 128)
+        {
+            throw new YggdrasilException(400, "IllegalArgumentException", "Client token is too long.");
+        }
 
         var client = await dbContext.YggdrasilClients
             .FirstOrDefaultAsync(entity => entity.UserId == user.Id && entity.ClientToken == clientToken, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
+        var activeSince = now.AddHours(-options.RefreshTokenExpireHours);
+        if (client is null || client.LastUsedAt < activeSince)
+        {
+            var activeSessions = await dbContext.YggdrasilClients.CountAsync(
+                entity => entity.UserId == user.Id && entity.LastUsedAt >= activeSince,
+                cancellationToken);
+            if (activeSessions >= options.MaxActiveSessions)
+            {
+                throw new YggdrasilException(
+                    StatusCodes.Status403Forbidden,
+                    "ForbiddenOperationException",
+                    "The active session limit has been reached.");
+            }
+        }
+
         if (client is null)
         {
             client = new YggdrasilClient
@@ -47,42 +96,68 @@ public sealed partial class YggdrasilService(
         }
         else
         {
+            var version = client.Version;
+            var changed = await dbContext.YggdrasilClients
+                .Where(entity => entity.Id == client.Id && entity.Version == version)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(entity => entity.Version, entity => entity.Version + 1)
+                    .SetProperty(entity => entity.PlayerId, selectedPlayer == null ? (Guid?)null : selectedPlayer.Id)
+                    .SetProperty(entity => entity.AuthenticationMethod, AuthenticationMethodType.Password)
+                    .SetProperty(entity => entity.LastUsedAt, now), cancellationToken);
+            if (changed != 1) throw YggdrasilException.InvalidToken();
             client.Version += 1;
             client.PlayerId = selectedPlayer?.Id;
             client.AuthenticationMethod = AuthenticationMethodType.Password;
             client.LastUsedAt = now;
+            // ExecuteUpdate bypasses tracking; Unchanged would otherwise restore the stale original Version.
+            dbContext.Entry(client).OriginalValues.SetValues(client);
+            dbContext.Entry(client).State = EntityState.Unchanged;
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
-        var accessToken = CreateAccessToken(client, options);
+        var accessToken = await CreateAccessTokenAsync(client, options, cancellationToken);
         var selectedProfile = selectedPlayer is null ? null : ToProfile(selectedPlayer);
+        var availableProfiles = selectedProfile is null
+            ? user.Players.Select(ToProfile).ToArray()
+            : [selectedProfile];
         return new AuthenticateResponse(
             accessToken,
             client.ClientToken,
             selectedProfile,
-            user.Players.Select(ToProfile).ToArray(),
+            availableProfiles,
             request.RequestUser ? ToUser(user) : null);
     }
 
+    /// <summary>Allows refresh-window tokens and rotates Version under the account lock. Revalidation after waiting prevents an unbound client from using an ownership snapshot predating transfer/remap; committed tracked originals preserve the rotated version.</summary>
     public async Task<RefreshResponse> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken)
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
-        var client = await ValidateAccessTokenAsync(request.AccessToken, request.ClientToken, false, cancellationToken);
+        EnsureAuthServerEnabled(options);
+        var validated = await ValidateAccessTokenAsync(
+            request.AccessToken, request.ClientToken, false, true, cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await lifecycleService.LockUserAsync(dbContext, validated.Client.UserId, cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        validated = await ValidateAccessTokenAsync(
+            request.AccessToken, request.ClientToken, false, true, cancellationToken);
+        var client = validated.Client;
         Player? selectedPlayer = client.Player;
 
         if (request.SelectedProfile is not null)
         {
+            var selectedProfileId = YggdrasilFormat.ParseUnsignedUuid(request.SelectedProfile.Id);
             if (client.PlayerId is not null)
             {
-                throw new YggdrasilException(
+                if (selectedProfileId != client.Player!.MinecraftUuid)
+                    throw new YggdrasilException(
                     StatusCodes.Status400BadRequest,
                     "IllegalArgumentException",
                     "Access token already has a profile assigned.");
             }
 
-            var selectedProfileId = YggdrasilFormat.ParseUnsignedUuid(request.SelectedProfile.Id);
-            selectedPlayer = client.User.Players.FirstOrDefault(player => player.Id == selectedProfileId);
+            selectedPlayer = client.User.Players.FirstOrDefault(player => player.MinecraftUuid == selectedProfileId);
             if (selectedPlayer is null)
             {
                 throw YggdrasilException.InvalidToken();
@@ -91,49 +166,97 @@ public sealed partial class YggdrasilService(
             client.PlayerId = selectedPlayer.Id;
         }
 
-        client.Version += 1;
-        client.LastUsedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (selectedPlayer is null)
+        {
+            throw new YggdrasilException(
+                StatusCodes.Status400BadRequest,
+                "IllegalArgumentException",
+                "A selected profile is required.");
+        }
 
-        var accessToken = CreateAccessToken(client, options);
+        var oldVersion = client.Version;
+        var lastUsedAt = DateTimeOffset.UtcNow;
+        var changed = await dbContext.YggdrasilClients
+            .Where(entity => entity.Id == client.Id && entity.Version == oldVersion && !entity.User.IsDisabled)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(entity => entity.Version, entity => entity.Version + 1)
+                .SetProperty(entity => entity.PlayerId, selectedPlayer.Id)
+                .SetProperty(entity => entity.LastUsedAt, lastUsedAt), cancellationToken);
+        if (changed != 1) throw YggdrasilException.InvalidToken();
+        client.Version = oldVersion + 1;
+        client.Player = selectedPlayer;
+        client.PlayerId = selectedPlayer.Id;
+        client.LastUsedAt = lastUsedAt;
+        // Accept the atomically committed version before Unchanged can reject the tracked changes.
+        dbContext.Entry(client).OriginalValues.SetValues(client);
+        dbContext.Entry(client).State = EntityState.Unchanged;
+
+        await transaction.CommitAsync(cancellationToken);
+
+        var accessToken = await CreateAccessTokenAsync(client, options, cancellationToken);
         return new RefreshResponse(
             accessToken,
             client.ClientToken,
-            selectedPlayer is null ? null : ToProfile(selectedPlayer),
-            client.User.Players.Select(ToProfile).ToArray(),
+            ToProfile(selectedPlayer),
+            [ToProfile(selectedPlayer)],
             request.RequestUser ? ToUser(client.User) : null);
     }
 
+    /// <summary>Checks the usable lifetime and committed rename boundary; validation never extends the refresh window or session slot lifetime.</summary>
     public async Task ValidateAsync(ValidateRequest request, CancellationToken cancellationToken)
     {
-        await ValidateAccessTokenAsync(request.AccessToken, request.ClientToken, false, cancellationToken);
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        EnsureAuthServerEnabled(options);
+        await ValidateAccessTokenAsync(request.AccessToken, request.ClientToken, false, false, cancellationToken);
     }
 
+    /// <summary>Idempotently hard-revokes a refreshable local token by bumping Version and releasing its active session slot.</summary>
     public async Task InvalidateAsync(InvalidateRequest request, CancellationToken cancellationToken)
     {
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        EnsureAuthServerEnabled(options);
         try
         {
-            var client = await ValidateAccessTokenAsync(request.AccessToken, request.ClientToken, false, cancellationToken);
-            client.Version += 1;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            var client = (await ValidateAccessTokenAsync(
+                request.AccessToken, request.ClientToken, false, true, cancellationToken)).Client;
+            await dbContext.YggdrasilClients.Where(entity => entity.Id == client.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(entity => entity.Version, entity => entity.Version + 1)
+                    .SetProperty(entity => entity.LastUsedAt, DateTimeOffset.UnixEpoch), cancellationToken);
         }
         catch (YggdrasilException)
         {
         }
     }
 
+    /// <summary>Rechecks credentials and the initially locked account identity before revoking local clients. A transferred alias is rejected instead of locking a second owner out of order; shares the atomic login/signout rate interval.</summary>
     public async Task SignoutAsync(SignoutRequest request, CancellationToken cancellationToken)
     {
-        var (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
-        await dbContext.YggdrasilClients
-            .Where(client => client.UserId == user.Id)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(client => client.Version, client => client.Version + 1), cancellationToken);
+        var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        EnsureAuthServerEnabled(options);
+        var (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "退出初次校验");
+        await ApplyAuthenticationRateLimitAsync(user.Id, options);
+        var lockedUserId = user.Id;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await lifecycleService.LockUserAsync(dbContext, lockedUserId, cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "退出加锁后复核");
+        if (user.Id != lockedUserId)
+        {
+            logger.LogWarning(
+                "Yggdrasil 退出失败：加锁后账户身份发生变化。登录标识={Login}，原账户ID={LockedUserId}，当前账户ID={UserId}，追踪ID={TraceId}",
+                JsonSerializer.Serialize(request.Username), lockedUserId, user.Id, Activity.Current?.Id);
+            throw YggdrasilException.InvalidCredentials();
+        }
+        await lifecycleService.RevokeUserClientsAsync(dbContext, user.Id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
+    /// <summary>Resolves normalized account/email/profile names, rejects disabled users and enforces verified email only when Union is enabled.</summary>
     private async Task<(User User, Player? SelectedPlayer)> AuthenticateUserAsync(
         string login,
         string password,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string stage)
     {
         var normalizedLogin = YggdrasilFormat.Normalize(login);
         Player? selectedPlayer = await dbContext.Players
@@ -156,14 +279,31 @@ public sealed partial class YggdrasilService(
                     cancellationToken);
         }
 
-        if (user is null || user.IsDisabled)
+        var unionOptions = await configurationService.GetUnionOptionsAsync(cancellationToken);
+        var passwordMethod = user?.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
+        if (user is null || user.IsDisabled || (unionOptions.Enabled && user.EmailVerifiedAt is null))
         {
+            LogCredentialFailure(user is null ? "未找到账户" : user.IsDisabled ? "账户已禁用" : "Union 已启用但账户邮箱未验证");
             throw YggdrasilException.InvalidCredentials();
         }
 
-        var passwordMethod = user.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
-        if (passwordMethod?.PasswordHash is null || !VerifyPassword(password, passwordMethod.PasswordHash))
+        if (passwordMethod?.PasswordHash is null)
         {
+            LogCredentialFailure(passwordMethod is null ? "账户未配置密码登录方式" : "密码登录方式缺少密码哈希");
+            throw YggdrasilException.InvalidCredentials();
+        }
+
+        try
+        {
+            if (!BCrypt.Net.BCrypt.Verify(password, passwordMethod.PasswordHash))
+            {
+                LogCredentialFailure("BCrypt 密码校验不匹配");
+                throw YggdrasilException.InvalidCredentials();
+            }
+        }
+        catch (BCrypt.Net.SaltParseException)
+        {
+            LogCredentialFailure("BCrypt 密码哈希格式无效或为不兼容的旧格式");
             throw YggdrasilException.InvalidCredentials();
         }
 
@@ -173,17 +313,22 @@ public sealed partial class YggdrasilService(
         }
 
         return (user, selectedPlayer);
-    }
 
-    private static bool VerifyPassword(string password, string passwordHash)
-    {
-        try
+        void LogCredentialFailure(string reason)
         {
-            return BCrypt.Net.BCrypt.Verify(password, passwordHash);
-        }
-        catch (BCrypt.Net.SaltParseException)
-        {
-            return false;
+            var matchSource = selectedPlayer is not null ? "角色名"
+                : user is null ? "未匹配"
+                : user.NormalizedUserName == normalizedLogin ? "用户名" : "邮箱";
+            logger.LogWarning(
+                "Yggdrasil 凭据校验失败：{Reason}。阶段={Stage}，追踪ID={TraceId}，登录标识={Login}，规范化标识={NormalizedLogin}，匹配方式={MatchSource}，"
+                + "账户ID={UserId}，用户名={UserName}，用户名匹配={UserNameMatches}，邮箱匹配={EmailMatches}，账户已禁用={IsDisabled}，"
+                + "Union已启用={UnionEnabled}，邮箱验证时间={EmailVerifiedAt}，角色数量={PlayerCount}，角色ID={PlayerId}，角色名={PlayerName}，MinecraftUUID={MinecraftUuid}，"
+                + "认证方式={AuthenticationMethods}，密码认证ID={PasswordMethodId}，存在密码哈希={HasPasswordHash}，密码哈希长度={PasswordHashLength}，输入密码长度={PasswordLength}",
+                reason, stage, Activity.Current?.Id, JsonSerializer.Serialize(login), JsonSerializer.Serialize(normalizedLogin), matchSource,
+                user?.Id, user?.UserName, user?.NormalizedUserName == normalizedLogin, user?.NormalizedEmail == normalizedLogin, user?.IsDisabled,
+                unionOptions.Enabled, user?.EmailVerifiedAt, user?.Players.Count, selectedPlayer?.Id, selectedPlayer?.Name, selectedPlayer?.MinecraftUuid,
+                user is null ? string.Empty : string.Join(",", user.AuthenticationMethods.Select(method => method.Type)),
+                passwordMethod?.Id, passwordMethod?.PasswordHash is not null, passwordMethod?.PasswordHash?.Length, password.Length);
         }
     }
 
@@ -191,26 +336,38 @@ public sealed partial class YggdrasilService(
 
     #region Session
 
+    /// <summary>Validates a usable local Yggdrasil token bound to the Minecraft UUID and caches internal identity, version and expiry for later database revalidation.</summary>
     public async Task JoinAsync(JoinRequest request, CancellationToken cancellationToken)
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
-        var client = await ValidateAccessTokenAsync(request.AccessToken, null, true, cancellationToken);
+        var validated = await ValidateAccessTokenAsync(request.AccessToken, null, true, false, cancellationToken);
+        var client = validated.Client;
         var selectedProfileId = YggdrasilFormat.ParseUnsignedUuid(request.SelectedProfile);
 
-        if (client.Player is null || client.Player.Id != selectedProfileId)
+        if (client.Player is null || client.Player.MinecraftUuid != selectedProfileId)
         {
             throw YggdrasilException.InvalidToken();
         }
 
         var key = JoinKey(client.Player.Name, request.ServerId);
-        var entry = new JoinSessionEntry(client.Player.Id, request.SelectedProfile, request.ServerId);
+        var entry = new JoinSessionEntry(
+            client.Player.Id,
+            client.Player.MinecraftUuid,
+            client.Id,
+            client.Version,
+            validated.IssuedAtMilliseconds,
+            validated.ExpiresAtMilliseconds,
+            request.SelectedProfile,
+            request.ServerId);
         await cacheService.SetAsync(key, entry, TimeSpan.FromSeconds(options.JoinSessionTtlSeconds), cancellationToken);
     }
 
+    /// <summary>Consumes the join once with Redis GETDEL, then reloads player/client state and rejects expiry, revocation, rename, remap, disable, deletion or transfer.</summary>
     public async Task<SessionProfileResponse?> HasJoinedAsync(string username, string serverId, CancellationToken cancellationToken)
     {
         var key = JoinKey(username, serverId);
-        var entry = await cacheService.GetAsync<JoinSessionEntry>(key, cancellationToken);
+        var cached = await _database.StringGetDeleteAsync(key);
+        var entry = cached.HasValue ? JsonSerializer.Deserialize<JoinSessionEntry>(cached.ToString()) : null;
         if (entry is null)
         {
             return null;
@@ -221,13 +378,32 @@ public sealed partial class YggdrasilService(
             .Include(entity => entity.SkinTexture)
             .Include(entity => entity.CapeTexture)
             .FirstOrDefaultAsync(entity => entity.Id == entry.PlayerId, cancellationToken);
-        if (player is null || player.NormalizedName != YggdrasilFormat.Normalize(username))
+        var client = await dbContext.YggdrasilClients
+            .AsNoTracking()
+            .Include(entity => entity.User)
+            .FirstOrDefaultAsync(entity => entity.Id == entry.ClientId, cancellationToken);
+        var renamedAt = player is null
+            ? null
+            : await lifecycleService.GetPlayerRenamedAtAsync(dbContext, player.Id, cancellationToken);
+        var unionOptions = await configurationService.GetUnionOptionsAsync(cancellationToken);
+        if (player is null
+            || client is null
+            || client.User.IsDisabled
+            || (unionOptions.Enabled && client.User.EmailVerifiedAt is null)
+            || client.Version != entry.ClientVersion
+            || client.UserId != player.UserId
+            || client.PlayerId != player.Id
+            || player.MinecraftUuid != entry.MinecraftUuid
+            || YggdrasilFormat.ToUnsignedId(player.MinecraftUuid) != entry.ProfileId
+            || player.NormalizedName != YggdrasilFormat.Normalize(username)
+            || entry.ServerId != serverId
+            || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= entry.ExpiresAtMilliseconds
+            || renamedAt >= entry.IssuedAtMilliseconds)
         {
             return null;
         }
 
-        await cacheService.RemoveAsync(key, cancellationToken);
-        return await GetSessionProfileAsync(player.Id, false, cancellationToken);
+        return BuildSessionProfile(player, false, await configurationService.GetYggdrasilOptionsAsync(cancellationToken));
     }
 
     private static string JoinKey(string username, string serverId)
@@ -241,9 +417,10 @@ public sealed partial class YggdrasilService(
 
     #region Profile
 
+    /// <summary>Exports the Minecraft UUID; frontend REST continues to use the unrelated internal player primary key.</summary>
     public ProfileDto ToProfile(Player player)
     {
-        return new ProfileDto(YggdrasilFormat.ToUnsignedId(player.Id), player.Name);
+        return new ProfileDto(YggdrasilFormat.ToUnsignedId(player.MinecraftUuid), player.Name);
     }
 
     public YggdrasilUserDto ToUser(User user)
@@ -253,6 +430,7 @@ public sealed partial class YggdrasilService(
             [new UserPropertyDto("preferredLanguage", user.PreferredLanguage)]);
     }
 
+    /// <summary>Resolves a normalized player name to its persisted Minecraft UUID for both legacy and minecraftservices aliases.</summary>
     public async Task<PlayerNameToIdResponse?> FindByNameAsync(string playerName, CancellationToken cancellationToken)
     {
         ValidatePlayerName(playerName);
@@ -260,9 +438,12 @@ public sealed partial class YggdrasilService(
         var player = await dbContext.Players
             .AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.NormalizedName == normalizedName, cancellationToken);
-        return player is null ? null : new PlayerNameToIdResponse(YggdrasilFormat.ToUnsignedId(player.Id), player.Name);
+        return player is null
+            ? null
+            : new PlayerNameToIdResponse(YggdrasilFormat.ToUnsignedId(player.MinecraftUuid), player.Name);
     }
 
+    /// <summary>Bounds and deduplicates normalized profile names while returning persisted Minecraft UUIDs.</summary>
     public async Task<IReadOnlyCollection<PlayerNameToIdResponse>> FindManyByNameAsync(
         IReadOnlyCollection<string> playerNames,
         CancellationToken cancellationToken)
@@ -285,22 +466,26 @@ public sealed partial class YggdrasilService(
         return await dbContext.Players
             .AsNoTracking()
             .Where(player => normalizedNames.Contains(player.NormalizedName))
-            .Select(player => new PlayerNameToIdResponse(YggdrasilFormat.ToUnsignedId(player.Id), player.Name))
+            .Select(player => new PlayerNameToIdResponse(
+                YggdrasilFormat.ToUnsignedId(player.MinecraftUuid), player.Name))
             .ToArrayAsync(cancellationToken);
     }
 
-    public async Task<SessionProfileResponse?> GetSessionProfileAsync(Guid playerId, bool unsigned, CancellationToken cancellationToken)
+    /// <summary>Reads a public session profile by Minecraft UUID, independently of internal REST IDs and bearer authentication.</summary>
+    public async Task<SessionProfileResponse?> GetSessionProfileAsync(
+        Guid minecraftUuid, bool unsigned, CancellationToken cancellationToken)
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var player = await dbContext.Players
             .AsNoTracking()
             .Include(entity => entity.SkinTexture)
             .Include(entity => entity.CapeTexture)
-            .FirstOrDefaultAsync(entity => entity.Id == playerId, cancellationToken);
+            .FirstOrDefaultAsync(entity => entity.MinecraftUuid == minecraftUuid, cancellationToken);
 
         return player is null ? null : BuildSessionProfile(player, unsigned, options);
     }
 
+    /// <summary>Builds textures and uploadableTextures properties with Minecraft identity; signed responses sign every property using the active texture RSA with SHA-1.</summary>
     private SessionProfileResponse BuildSessionProfile(Player player, bool unsigned, YggdrasilOptions options)
     {
         var textureMap = new Dictionary<string, object>();
@@ -328,17 +513,29 @@ public sealed partial class YggdrasilService(
         var texturePayload = new
         {
             timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            profileId = YggdrasilFormat.ToUnsignedId(player.Id),
+            profileId = YggdrasilFormat.ToUnsignedId(player.MinecraftUuid),
             profileName = player.Name,
+            isPublic = true,
+            signatureRequired = unsigned ? (bool?)null : true,
             textures = textureMap
         };
 
-        var value = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(texturePayload));
-        var signature = unsigned ? null : signingKey.SignTextureValue(value);
+        var value = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(texturePayload,
+            new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
+        var uploadableValue = "skin,cape";
+        var properties = new[]
+        {
+            new SessionProfileProperty(
+                "textures", value, unsigned ? null : signingKey.SignTextureValue(value)),
+            new SessionProfileProperty(
+                "uploadableTextures",
+                uploadableValue,
+                unsigned ? null : signingKey.SignTextureValue(uploadableValue))
+        };
         return new SessionProfileResponse(
-            YggdrasilFormat.ToUnsignedId(player.Id),
+            YggdrasilFormat.ToUnsignedId(player.MinecraftUuid),
             player.Name,
-            [new SessionProfileProperty("textures", value, signature)]);
+            properties);
     }
 
     private static string TextureUrl(Guid textureId, YggdrasilOptions options)
@@ -372,9 +569,11 @@ public sealed partial class YggdrasilService(
 
     #region Metadata
 
+    /// <summary>Publishes the active texture public key and enabled Union skin domains without exposing the immutable local JWT key or private configuration.</summary>
     public async Task<object> GetMetadataAsync(CancellationToken cancellationToken)
     {
         var value = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        var connect = startupConnectOptions;
         var meta = new Dictionary<string, object?>
         {
             ["serverName"] = value.ServerName,
@@ -387,6 +586,8 @@ public sealed partial class YggdrasilService(
             ["feature.enable_profile_key"] = value.EnableProfileKey,
             ["feature.username_check"] = value.UsernameCheck
         };
+        if (connect.Enabled)
+            meta["feature.openid_configuration_url"] = $"{connect.Issuer.TrimEnd('/')}/.well-known/openid-configuration";
 
         if (!string.IsNullOrWhiteSpace(value.HomepageUrl) || !string.IsNullOrWhiteSpace(value.RegisterUrl))
         {
@@ -401,7 +602,7 @@ public sealed partial class YggdrasilService(
         {
             meta,
             skinDomains = value.SkinDomains,
-            signaturePublickey = signingKey.PublicKeyPem
+            signaturePublickey = signingKey.TexturePublicKeyPem
         };
     }
 
@@ -409,9 +610,13 @@ public sealed partial class YggdrasilService(
 
     #region Token
 
-    private string CreateAccessToken(YggdrasilClient client, YggdrasilOptions options)
+    /// <summary>Signs a client/version JWT with the immutable local key; iat_ms is strictly after the latest rename so immediate fresh tokens remain usable.</summary>
+    private async Task<string> CreateAccessTokenAsync(YggdrasilClient client, YggdrasilOptions options, CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        var renamedAt = client.PlayerId is null ? null
+            : await lifecycleService.GetPlayerRenamedAtAsync(dbContext, client.PlayerId.Value, cancellationToken);
+        var issuedAtMilliseconds = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), (renamedAt ?? 0) + 1);
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(issuedAtMilliseconds);
         var header = new Dictionary<string, object>
         {
             ["alg"] = "RS256",
@@ -423,6 +628,7 @@ public sealed partial class YggdrasilService(
             ["sub"] = client.Id.ToString("D"),
             ["version"] = client.Version,
             ["iat"] = now.ToUnixTimeSeconds(),
+            ["iat_ms"] = issuedAtMilliseconds,
             ["exp"] = now.AddHours(options.AccessTokenExpireHours).ToUnixTimeSeconds()
         };
 
@@ -461,6 +667,7 @@ public sealed partial class YggdrasilService(
         return new AdminSessionOverviewDto(totalClients, recentActivities);
     }
 
+    /// <summary>Hard-revokes all local client versions under the same account lock used by authentication, and releases the session slots.</summary>
     public async Task RevokeAllUserSessionsAsync(Guid userId, CancellationToken cancellationToken)
     {
         var userExists = await dbContext.Users.AnyAsync(user => user.Id == userId, cancellationToken);
@@ -469,11 +676,9 @@ public sealed partial class YggdrasilService(
             throw new AuthException(StatusCodes.Status404NotFound, "User was not found.");
         }
 
-        await dbContext.YggdrasilClients
-            .Where(client => client.UserId == userId)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(client => client.Version, client => client.Version + 1),
-                cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await lifecycleService.RevokeUserClientsAsync(dbContext, userId, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<AdminSessionDto>> ListUserSessionsAsync(
@@ -508,47 +713,53 @@ public sealed partial class YggdrasilService(
 
     #endregion
 
-    private async Task<YggdrasilClient> ValidateAccessTokenAsync(
+    /// <summary>Verifies only local RS256 client tokens, ownership and Version. Usable calls enforce rename/exp; refresh calls use the bounded issuance window, with legacy iat seconds converted to milliseconds.</summary>
+    private async Task<ValidatedAccessToken> ValidateAccessTokenAsync(
         string accessToken,
         string? clientToken,
         bool requirePlayer,
+        bool allowRefreshWindow,
         CancellationToken cancellationToken)
     {
-        var parts = accessToken.Split('.');
-        if (parts.Length != 3)
-        {
-            throw YggdrasilException.InvalidToken();
-        }
-
-        var signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
-        var signature = YggdrasilFormat.Base64UrlDecode(parts[2]);
-        if (!signingKey.VerifyJwtInput(signingInput, signature))
-        {
-            throw YggdrasilException.InvalidToken();
-        }
-
-        JsonDocument payload;
         try
         {
-            payload = JsonDocument.Parse(YggdrasilFormat.Base64UrlDecode(parts[1]));
-        }
-        catch (JsonException)
-        {
-            throw YggdrasilException.InvalidToken();
-        }
+            var parts = accessToken.Split('.');
+            if (parts.Length != 3)
+            {
+                throw YggdrasilException.InvalidToken();
+            }
 
-        using (payload)
-        {
+            var signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
+            var signature = YggdrasilFormat.Base64UrlDecode(parts[2]);
+            if (!signingKey.VerifyJwtInput(signingInput, signature))
+            {
+                throw YggdrasilException.InvalidToken();
+            }
+
+            using var header = JsonDocument.Parse(YggdrasilFormat.Base64UrlDecode(parts[0]));
+            if (!header.RootElement.TryGetProperty("alg", out var algorithm) || algorithm.GetString() != "RS256")
+                throw YggdrasilException.InvalidToken();
+
+            using var payload = JsonDocument.Parse(YggdrasilFormat.Base64UrlDecode(parts[1]));
             if (!payload.RootElement.TryGetProperty("sub", out var subjectElement)
                 || !Guid.TryParse(subjectElement.GetString(), out var clientId)
                 || !payload.RootElement.TryGetProperty("version", out var versionElement)
+                || !payload.RootElement.TryGetProperty("iat", out var issuedAtElement)
                 || !payload.RootElement.TryGetProperty("exp", out var expiresElement))
             {
                 throw YggdrasilException.InvalidToken();
             }
 
+            var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+            var unionOptions = await configurationService.GetUnionOptionsAsync(cancellationToken);
+            var issuedAtSeconds = issuedAtElement.GetInt64();
+            var issuedAtMilliseconds = payload.RootElement.TryGetProperty("iat_ms", out var issuedAtMsElement)
+                ? issuedAtMsElement.GetInt64()
+                : checked(issuedAtSeconds * 1000);
             var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expiresElement.GetInt64());
-            if (DateTimeOffset.UtcNow >= expiresAt)
+            var refreshExpiresAt = DateTimeOffset.FromUnixTimeMilliseconds(issuedAtMilliseconds)
+                .AddHours(options.RefreshTokenExpireHours);
+            if (DateTimeOffset.UtcNow >= (allowRefreshWindow ? refreshExpiresAt : expiresAt))
             {
                 throw YggdrasilException.InvalidToken();
             }
@@ -564,18 +775,67 @@ public sealed partial class YggdrasilService(
 
             if (client is null
                 || client.User.IsDisabled
+                || (unionOptions.Enabled && client.User.EmailVerifiedAt is null)
                 || client.Version != versionElement.GetInt32()
                 || (clientToken is not null && client.ClientToken != clientToken)
-                || (requirePlayer && client.Player is null))
+                || (requirePlayer && client.Player is null)
+                || (client.Player is not null && client.Player.UserId != client.UserId))
             {
                 throw YggdrasilException.InvalidToken();
             }
 
-            client.LastUsedAt = DateTimeOffset.UtcNow;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return client;
+            if (!allowRefreshWindow && client.Player is not null)
+            {
+                var renamedAt = await lifecycleService.GetPlayerRenamedAtAsync(dbContext, client.Player.Id, cancellationToken);
+                if (renamedAt >= issuedAtMilliseconds)
+                {
+                    throw YggdrasilException.InvalidToken();
+                }
+            }
+
+            return new ValidatedAccessToken(client, issuedAtMilliseconds, expiresAt.ToUnixTimeMilliseconds());
+        }
+        catch (Exception exception) when (exception is FormatException
+                                           or JsonException
+                                           or InvalidOperationException
+                                           or ArgumentOutOfRangeException
+                                           or OverflowException
+                                           or System.Security.Cryptography.CryptographicException)
+        {
+            throw YggdrasilException.InvalidToken();
         }
     }
+
+    /// <summary>Applies the authserver switch to password/session management endpoints without disabling public session profile lookup.</summary>
+    private static void EnsureAuthServerEnabled(YggdrasilOptions options)
+    {
+        if (!options.AuthServerEnabled)
+        {
+            throw new YggdrasilException(
+                StatusCodes.Status403Forbidden,
+                "ForbiddenOperationException",
+                "The authentication server is disabled.");
+        }
+    }
+
+    /// <summary>Uses a single atomic Redis NX write and TTL per account to bound concurrent login/signout requests across processes.</summary>
+    private async Task ApplyAuthenticationRateLimitAsync(Guid userId, YggdrasilOptions options)
+    {
+        var accepted = await _database.StringSetAsync(
+            $"yggdrasil:auth-rate:{userId:N}",
+            "1",
+            TimeSpan.FromMilliseconds(options.AuthenticationRateLimitMilliseconds),
+            When.NotExists);
+        if (!accepted)
+        {
+            throw new YggdrasilException(
+                StatusCodes.Status403Forbidden,
+                "ForbiddenOperationException",
+                "Authentication requests are too frequent.");
+        }
+    }
+
+    private sealed record ValidatedAccessToken(YggdrasilClient Client, long IssuedAtMilliseconds, long ExpiresAtMilliseconds);
 
     #endregion
 }

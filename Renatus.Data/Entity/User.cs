@@ -3,11 +3,13 @@ namespace Renatus.Host.Entity;
 public sealed class User
 {
     public Guid Id { get; set; }
+    public long UnionUserId { get; set; }
     public string UserName { get; set; } = string.Empty;
     public string NormalizedUserName { get; set; } = string.Empty;
     public string NickName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string NormalizedEmail { get; set; } = string.Empty;
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
     public string? AvatarBase64 { get; set; }
     public string PreferredLanguage { get; set; } = "zh_CN";
     public UserRole Role { get; set; } = UserRole.Player;

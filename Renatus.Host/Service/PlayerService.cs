@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Entity;
 using Renatus.Host.Service.Cache;
+using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
 
 namespace Renatus.Host.Service;
@@ -11,11 +12,15 @@ namespace Renatus.Host.Service;
 public sealed partial class PlayerService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     ICacheService cacheService,
-    IMapper mapper)
+    IMapper mapper,
+    AppConfigurationService configurationService,
+    YggdrasilLifecycleService yggdrasilLifecycle,
+    UnionService unionService)
 {
     private static readonly TimeSpan UserPlayersCacheTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan PlayerCacheTtl = TimeSpan.FromMinutes(5);
 
+    /// <summary>Chooses a new Minecraft UUID using the configured v3/v4 creation policy while keeping REST primary IDs independent; existing players are never regenerated.</summary>
     public async Task<PlayerDto> CreatePlayerAsync(
         Guid userId,
         CreatePlayerRequest request,
@@ -49,9 +54,13 @@ public sealed partial class PlayerService(
         await EnsureTextureTypeAsync(dbContext, user.Id, request.SkinTextureId, TextureType.Skin, cancellationToken);
         await EnsureTextureTypeAsync(dbContext, user.Id, request.CapeTextureId, TextureType.Cape, cancellationToken);
 
+        var yggdrasilOptions = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var player = new Player
         {
             Id = Guid.NewGuid(),
+            MinecraftUuid = yggdrasilOptions.UuidAlgorithm == "v3"
+                ? YggdrasilFormat.CreateOfflinePlayerUuid(name)
+                : Guid.NewGuid(),
             UserId = user.Id,
             Name = name,
             NormalizedName = normalizedName,
@@ -71,6 +80,7 @@ public sealed partial class PlayerService(
         }
 
         await RemoveUserPlayersCacheAsync(user.Id, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return ToDto(player);
     }
 
@@ -135,6 +145,7 @@ public sealed partial class PlayerService(
         return response;
     }
 
+    /// <summary>Validates texture visibility/type and player ownership, commits the REST update, then invalidates caches and marks Union synchronization dirty.</summary>
     public async Task<PlayerDto> UpdatePlayerTexturesAsync(
         Guid userId,
         Guid playerId,
@@ -163,9 +174,11 @@ public sealed partial class PlayerService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await RemovePlayerCachesAsync(userId, playerId, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return ToDto(player);
     }
 
+    /// <summary>Locks the owner before ordered client revocation and player deletion, rechecks ownership after waiting, and commits revocation with foreign-key cleanup.</summary>
     public async Task<DeletePlayerResponse> DeletePlayerAsync(Guid userId, Guid playerId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -178,9 +191,20 @@ public sealed partial class PlayerService(
             throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
         }
 
-        dbContext.Players.Remove(player);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.LockUserAsync(dbContext, userId, cancellationToken);
+            await dbContext.Entry(player).ReloadAsync(cancellationToken);
+            if (dbContext.Entry(player).State == EntityState.Detached || player.UserId != userId
+                || !await dbContext.Users.AnyAsync(user => user.Id == userId && !user.IsDisabled, cancellationToken))
+                throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+            await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+            dbContext.Players.Remove(player);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         await RemovePlayerCachesAsync(userId, playerId, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
         return new DeletePlayerResponse(playerId);
     }
 
@@ -327,6 +351,7 @@ public sealed partial class PlayerService(
         });
     }
 
+    /// <summary>Locks source/target accounts in database ID order and rechecks the source owner before mutation. Transfers revoke ordered clients before the player update; rename preserves UUID and records a transactional soft boundary.</summary>
     public async Task<AdminPlayerDetailDto> UpdatePlayerAsync(
         Guid playerId,
         AdminUpdatePlayerRequest request,
@@ -340,6 +365,15 @@ public sealed partial class PlayerService(
         }
 
         var originalOwnerId = player.UserId;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await yggdrasilLifecycle.LockUsersAsync(dbContext,
+            request.UserId is { } targetOwnerId ? [originalOwnerId, targetOwnerId] : [originalOwnerId], cancellationToken);
+        await dbContext.Entry(player).ReloadAsync(cancellationToken);
+        if (dbContext.Entry(player).State == EntityState.Detached)
+            throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+        if (player.UserId != originalOwnerId)
+            throw new PlayerException(StatusCodes.Status409Conflict, "Player ownership changed; retry the update.");
+        var originalName = player.Name;
 
         if (request.Name is not null)
         {
@@ -408,17 +442,33 @@ public sealed partial class PlayerService(
             player.UserId = targetUserId;
         }
 
+        var ownerChanged = player.UserId != originalOwnerId;
+        var nameChanged = player.Name != originalName;
+        if (ownerChanged)
+        {
+            await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+        }
+
+        if (nameChanged)
+        {
+            yggdrasilLifecycle.MarkPlayerRenamed(dbContext, player);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         await RemovePlayerCachesAsync(originalOwnerId, playerId, cancellationToken);
-        if (player.UserId != originalOwnerId)
+        if (ownerChanged)
         {
             await RemovePlayerCachesAsync(player.UserId, playerId, cancellationToken);
         }
 
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
+
         return await GetPlayerDetailAsync(playerId, cancellationToken);
     }
 
+    /// <summary>Locks and rechecks the owner before ordered client revocation and administrator deletion, then invalidates caches and schedules Union reconciliation after commit.</summary>
     public async Task DeletePlayerAdminAsync(Guid playerId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -429,9 +479,21 @@ public sealed partial class PlayerService(
         }
 
         var ownerId = player.UserId;
-        dbContext.Players.Remove(player);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await yggdrasilLifecycle.LockUserAsync(dbContext, ownerId, cancellationToken);
+            await dbContext.Entry(player).ReloadAsync(cancellationToken);
+            if (dbContext.Entry(player).State == EntityState.Detached)
+                throw new PlayerException(StatusCodes.Status404NotFound, "Player was not found.");
+            if (player.UserId != ownerId)
+                throw new PlayerException(StatusCodes.Status409Conflict, "Player ownership changed; retry the deletion.");
+            await yggdrasilLifecycle.RevokePlayerClientsAsync(dbContext, playerId, cancellationToken);
+            dbContext.Players.Remove(player);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         await RemovePlayerCachesAsync(ownerId, playerId, cancellationToken);
+        await unionService.MarkProfilesDirtyAsync(cancellationToken);
     }
 
     public async Task<int> CountPlayersAsync(CancellationToken cancellationToken)

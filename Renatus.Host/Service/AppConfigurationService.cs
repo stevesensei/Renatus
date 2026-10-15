@@ -7,7 +7,7 @@ using Renatus.Host.Service.Cache;
 
 namespace Renatus.Host.Service;
 
-public sealed class AppConfigurationService(
+public sealed partial class AppConfigurationService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     ICacheService cacheService)
 {
@@ -66,20 +66,56 @@ public sealed class AppConfigurationService(
         return UpdateAnnouncementAsync(AppConfigurationKeys.SiteAnnouncement, options, cancellationToken);
     }
 
+    /// <summary>Derives local public links and merges Union bs_root hosts only while enabled; private signing settings remain internal and bounded protocol settings are checked.</summary>
     public async Task<YggdrasilOptions> GetYggdrasilOptionsAsync(CancellationToken cancellationToken)
     {
         var siteTask = GetSiteOptionsAsync(cancellationToken);
         var yggdrasilTask = GetAsync<YggdrasilOptions>(AppConfigurationKeys.Yggdrasil, cancellationToken);
-        await Task.WhenAll(siteTask, yggdrasilTask);
+        var unionOptionsTask = GetUnionOptionsAsync(cancellationToken);
+        var unionStateTask = GetUnionStateAsync(cancellationToken);
+        await Task.WhenAll(siteTask, yggdrasilTask, unionOptionsTask, unionStateTask);
 
         var site = await siteTask;
         var yggdrasil = await yggdrasilTask;
+        ValidateYggdrasilOptions(yggdrasil);
         var publicBaseUrl = NormalizePublicBaseUrl(site.PublicBaseUrl);
         yggdrasil.PublicBaseUrl = publicBaseUrl;
         yggdrasil.HomepageUrl = publicBaseUrl;
         yggdrasil.RegisterUrl = $"{publicBaseUrl}/login";
-        yggdrasil.SkinDomains = [RemoveProtocolAndSlashes(publicBaseUrl)];
+        var skinDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            RemoveProtocolAndSlashes(publicBaseUrl)
+        };
+        if ((await unionOptionsTask).Enabled)
+        {
+            foreach (var backend in (await unionStateTask).Servers)
+            {
+                if (Uri.TryCreate(backend.BsRoot, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                {
+                    skinDomains.Add(uri.Host);
+                }
+            }
+        }
+
+        yggdrasil.SkinDomains = skinDomains.Where(domain => domain.Length > 0).ToArray();
         return yggdrasil;
+    }
+
+    /// <summary>Bounds usable/refreshable lifetimes, session caps, atomic authentication intervals and UUID creation algorithms before runtime use.</summary>
+    private static void ValidateYggdrasilOptions(YggdrasilOptions options)
+    {
+        if (options.AccessTokenExpireHours is < 1 or > 720
+            || options.RefreshTokenExpireHours < options.AccessTokenExpireHours
+            || options.RefreshTokenExpireHours > 2160
+            || options.JoinSessionTtlSeconds is < 1 or > 300
+            || options.MaxProfileLookupCount is < 1 or > 1000
+            || options.MaxActiveSessions is < 1 or > 100
+            || options.AuthenticationRateLimitMilliseconds is < 1 or > 60000
+            || (options.UuidAlgorithm != "v3" && options.UuidAlgorithm != "v4"))
+        {
+            throw new InvalidOperationException("Yggdrasil configuration contains an invalid bounded value.");
+        }
     }
 
     private async Task<T> GetAsync<T>(string key, CancellationToken cancellationToken)

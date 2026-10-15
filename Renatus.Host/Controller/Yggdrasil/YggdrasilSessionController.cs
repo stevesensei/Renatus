@@ -2,11 +2,17 @@ using Microsoft.AspNetCore.Mvc;
 using Renatus.Host.Data;
 using Renatus.Host.Service;
 using Renatus.Host.Utils;
+using Microsoft.AspNetCore.Authentication;
+using OpenIddict.Validation.AspNetCore;
+using Renatus.Host.Service.Connect;
 
 namespace Renatus.Host.Controller.Yggdrasil;
 
 [Route("api/yggdrasil/sessionserver/session/minecraft")]
-public sealed class YggdrasilSessionController(YggdrasilService yggdrasilService)
+public sealed class YggdrasilSessionController(
+    YggdrasilService yggdrasilService,
+    ConnectSessionService connectSessionService,
+    IAuthenticationSchemeProvider schemeProvider)
     : YggdrasilControllerBase
 {
     [HttpPost("join")]
@@ -14,7 +20,25 @@ public sealed class YggdrasilSessionController(YggdrasilService yggdrasilService
     {
         try
         {
-            await yggdrasilService.JoinAsync(request, cancellationToken);
+            if (Request.Headers.Authorization.Count > 0)
+            {
+                if (await schemeProvider.GetSchemeAsync(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme) is null)
+                    throw YggdrasilException.InvalidToken();
+                var result = await HttpContext.AuthenticateAsync(
+                    OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+                if (!result.Succeeded || result.Principal is null) throw YggdrasilException.InvalidToken();
+                await connectSessionService.JoinAsync(result.Principal, request, cancellationToken);
+            }
+            else if (await schemeProvider.GetSchemeAsync(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme) is not null
+                && !string.IsNullOrWhiteSpace(request.AccessToken))
+            {
+                Request.Headers.Authorization = $"Bearer {request.AccessToken}";
+                var result = await HttpContext.AuthenticateAsync(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+                if (result.Succeeded && result.Principal is not null)
+                    await connectSessionService.JoinAsync(result.Principal, request, cancellationToken);
+                else await yggdrasilService.JoinAsync(request, cancellationToken);
+            }
+            else await yggdrasilService.JoinAsync(request, cancellationToken);
             return NoContent();
         }
         catch (YggdrasilException exception)
@@ -29,7 +53,8 @@ public sealed class YggdrasilSessionController(YggdrasilService yggdrasilService
         [FromQuery] string serverId,
         CancellationToken cancellationToken)
     {
-        var response = await yggdrasilService.HasJoinedAsync(username, serverId, cancellationToken);
+        var response = await connectSessionService.HasJoinedAsync(username, serverId, cancellationToken)
+            ?? await yggdrasilService.HasJoinedAsync(username, serverId, cancellationToken);
         return response is null ? NoContent() : Ok(response);
     }
 

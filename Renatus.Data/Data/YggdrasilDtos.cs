@@ -84,5 +84,10 @@ public sealed record YggdrasilErrorResponse(
 
 public sealed record JoinSessionEntry(
     [property: JsonPropertyName("playerId")] Guid PlayerId,
+    [property: JsonPropertyName("minecraftUuid")] Guid MinecraftUuid,
+    [property: JsonPropertyName("clientId")] Guid ClientId,
+    [property: JsonPropertyName("clientVersion")] int ClientVersion,
+    [property: JsonPropertyName("issuedAtMilliseconds")] long IssuedAtMilliseconds,
+    [property: JsonPropertyName("expiresAtMilliseconds")] long ExpiresAtMilliseconds,
     [property: JsonPropertyName("profileId")] string ProfileId,
     [property: JsonPropertyName("serverId")] string ServerId);

@@ -10,7 +10,8 @@ public sealed record AccountProfileDto(
     [property: JsonPropertyName("nickName")] string NickName,
     [property: JsonPropertyName("email")] string Email,
     [property: JsonPropertyName("avatarBase64")] string? AvatarBase64,
-    [property: JsonPropertyName("role")] UserRole Role);
+    [property: JsonPropertyName("role")] UserRole Role,
+    [property: JsonPropertyName("emailVerifiedAt")] DateTimeOffset? EmailVerifiedAt = null);
 
 public sealed record UpdateAccountProfileRequest(
     [param: Required, MaxLength(64)]
@@ -23,7 +24,10 @@ public sealed record UpdateAccountProfileRequest(
 
     [param: MaxLength(2_000_000)]
     [property: JsonPropertyName("avatarBase64")]
-    string? AvatarBase64);
+    string? AvatarBase64,
+
+    [property: JsonPropertyName("verificationCode")]
+    string? VerificationCode = null);
 
 public sealed record ChangePasswordRequest(
     [param: Required]
