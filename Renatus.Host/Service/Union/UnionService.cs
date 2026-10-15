@@ -21,14 +21,20 @@ public sealed partial class UnionService(
     private static readonly SemaphoreSlim ProfileSyncLock = new(1, 1);
     private readonly IDatabase _redis = connectionMultiplexer.GetDatabase();
 
-    /// <summary>Publishes PHP-compatible hello fields. unionBlacklist denotes signed center email lookup; emailVerification matches Union-enabled Yggdrasil authentication policy, and OAuth is not advertised.</summary>
+    /// <summary>Publishes PHP-compatible hello fields and advertises Union OAuth only when its enabled persistent private key is usable.</summary>
     public async Task<UnionMemberInfoResponse> GetMemberInfoAsync(CancellationToken cancellationToken)
     {
         var options = await configurationService.GetUnionOptionsAsync(cancellationToken);
         var state = await configurationService.GetUnionStateAsync(cancellationToken);
-        var features = options.Enabled ? new[] { "unionBlacklist", "emailVerification" } : [];
+        var features = options.Enabled
+            ? new List<string> { "unionBlacklist", "emailVerification" }
+            : [];
+        if (options.Enabled && options.OAuth2Enabled && HasValidOAuthPrivateKey(options.OAuth2SigningPrivateKeyPem))
+        {
+            features.Add("unionOAuth2");
+        }
         var version = typeof(UnionService).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
-        return new UnionMemberInfoResponse(version, state.ServerListVersion, state.PrivateKeyVersion, features);
+        return new UnionMemberInfoResponse(version, state.ServerListVersion, state.PrivateKeyVersion, features.ToArray());
     }
 
     /// <summary>Returns recovery state only; directory payloads, member secrets and private signing keys never enter admin status.</summary>
@@ -56,8 +62,12 @@ public sealed partial class UnionService(
 
         var apiRoot = request.ApiRoot?.Trim() ?? string.Empty;
         var memberCode = request.MemberCode?.Trim() ?? string.Empty;
+        var consentPath = request.OAuth2ConsentPath?.Trim() ?? string.Empty;
         if (memberCode.Length > 128 || request.MemberKey?.Length > 1024
-            || request.MemberKey?.Any(char.IsControl) == true)
+            || request.MemberKey?.Any(char.IsControl) == true
+            || consentPath.Length is < 1 or > 256 || !consentPath.StartsWith('/')
+            || consentPath.StartsWith("//", StringComparison.Ordinal)
+            || consentPath.Contains('?') || consentPath.Contains('#'))
         {
             throw new UnionException(StatusCodes.Status400BadRequest, "Union member settings are invalid.");
         }
@@ -81,6 +91,13 @@ public sealed partial class UnionService(
                     current.ApiRoot = apiRoot;
                     current.MemberCode = memberCode;
                     current.RequestTimeoutSeconds = request.RequestTimeoutSeconds;
+                    current.OAuth2Enabled = request.OAuth2Enabled;
+                    current.OAuth2ConsentPath = consentPath;
+                    if (request.OAuth2Enabled && string.IsNullOrWhiteSpace(current.OAuth2SigningPrivateKeyPem))
+                    {
+                        using var rsa = RSA.Create(2048);
+                        current.OAuth2SigningPrivateKeyPem = rsa.ExportPkcs8PrivateKeyPem();
+                    }
                     if (request.MemberKey is not null)
                     {
                         current.MemberKey = request.MemberKey.Trim();
@@ -238,7 +255,25 @@ public sealed partial class UnionService(
     private static UnionAdminSettingsResponse ToSettingsResponse(UnionOptions options)
     {
         return new UnionAdminSettingsResponse(options.Enabled, options.ApiRoot, options.MemberCode,
-            !string.IsNullOrWhiteSpace(options.MemberKey), options.RequestTimeoutSeconds);
+            !string.IsNullOrWhiteSpace(options.MemberKey), options.RequestTimeoutSeconds,
+            options.OAuth2Enabled, HasValidOAuthPrivateKey(options.OAuth2SigningPrivateKeyPem),
+            options.OAuth2ConsentPath);
+    }
+
+    private static bool HasValidOAuthPrivateKey(string? pem)
+    {
+        if (string.IsNullOrWhiteSpace(pem) || pem.Length > 16 * 1024) return false;
+        try
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(pem);
+            _ = rsa.ExportParameters(true);
+            return rsa.KeySize is >= 2048 and <= 8192;
+        }
+        catch (Exception exception) when (exception is CryptographicException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Rejects public-only, malformed, oversized, or unsupported RSA private material without including PEM contents in an error.</summary>

@@ -38,14 +38,19 @@ public sealed record UnionAdminSettingsResponse(
     string ApiRoot,
     string MemberCode,
     bool HasMemberKey,
-    int RequestTimeoutSeconds);
+    int RequestTimeoutSeconds,
+    bool OAuth2Enabled,
+    bool HasOAuth2SigningKey,
+    string OAuth2ConsentPath);
 
 public sealed record UnionAdminUpdateSettingsRequest(
     bool Enabled,
     string ApiRoot,
     string MemberCode,
     string? MemberKey,
-    int RequestTimeoutSeconds);
+    int RequestTimeoutSeconds,
+    bool OAuth2Enabled,
+    string OAuth2ConsentPath);
 
 public sealed record UnionAdminOperationResponse(
     string Status,

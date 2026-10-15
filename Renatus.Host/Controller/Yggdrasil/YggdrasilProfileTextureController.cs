@@ -2,12 +2,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Renatus.Host.Service;
 using Renatus.Host.Utils;
+using Microsoft.AspNetCore.Authentication;
+using OpenIddict.Validation.AspNetCore;
+using Renatus.Host.Service.Connect;
 
 namespace Renatus.Host.Controller.Yggdrasil;
 
 [Route("api/yggdrasil/api/user/profile")]
 [YggdrasilTextureInput]
-public sealed class YggdrasilProfileTextureController(YggdrasilService yggdrasilService) : YggdrasilControllerBase
+public sealed class YggdrasilProfileTextureController(
+    YggdrasilService yggdrasilService,
+    ConnectSessionService connectSessionService,
+    IAuthenticationSchemeProvider schemeProvider) : YggdrasilControllerBase
 {
     /// <summary>Parses the protocol multipart upload and delegates local Yggdrasil token verification without using frontend JWT authorization.</summary>
     [HttpPut("{uuid}/{type}")]
@@ -18,7 +24,10 @@ public sealed class YggdrasilProfileTextureController(YggdrasilService yggdrasil
         try
         {
             if (file is null) throw new YggdrasilException(400, "IllegalArgumentException", "Texture file is required.");
-            await yggdrasilService.UploadProfileTextureAsync(BearerToken(), uuid, type, model, file, cancellationToken);
+            var result = await AuthenticateConnectAsync();
+            if (result.Succeeded && result.Principal is not null)
+                await connectSessionService.UploadTextureAsync(result.Principal, uuid, type, model, file, cancellationToken);
+            else await yggdrasilService.UploadProfileTextureAsync(BearerToken(), uuid, type, model, file, cancellationToken);
             return NoContent();
         }
         catch (YggdrasilException exception) { return YggdrasilError(exception); }
@@ -30,7 +39,10 @@ public sealed class YggdrasilProfileTextureController(YggdrasilService yggdrasil
     {
         try
         {
-            await yggdrasilService.ResetProfileTextureAsync(BearerToken(), uuid, type, cancellationToken);
+            var result = await AuthenticateConnectAsync();
+            if (result.Succeeded && result.Principal is not null)
+                await connectSessionService.ResetTextureAsync(result.Principal, uuid, type, cancellationToken);
+            else await yggdrasilService.ResetProfileTextureAsync(BearerToken(), uuid, type, cancellationToken);
             return NoContent();
         }
         catch (YggdrasilException exception) { return YggdrasilError(exception); }
@@ -45,6 +57,12 @@ public sealed class YggdrasilProfileTextureController(YggdrasilService yggdrasil
             throw YggdrasilException.InvalidToken();
         return authorization[7..].Trim();
     }
+
+    /// <summary>Keeps traditional texture authentication available when the optional Connect validation handler is disabled at startup.</summary>
+    private async Task<AuthenticateResult> AuthenticateConnectAsync()
+        => await schemeProvider.GetSchemeAsync(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme) is null
+            ? AuthenticateResult.NoResult()
+            : await HttpContext.AuthenticateAsync(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 }
 
 public sealed class YggdrasilTextureInputAttribute : ActionFilterAttribute, IAsyncResourceFilter

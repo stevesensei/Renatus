@@ -19,7 +19,8 @@ public sealed partial class YggdrasilService(
     YggdrasilLifecycleService lifecycleService,
     TextureService textureService,
     PlayerService playerService,
-    IConnectionMultiplexer redis)
+    IConnectionMultiplexer redis,
+    YggdrasilConnectOptions startupConnectOptions)
 {
     private readonly IDatabase _database = redis.GetDatabase();
     #region Auth
@@ -536,6 +537,7 @@ public sealed partial class YggdrasilService(
     public async Task<object> GetMetadataAsync(CancellationToken cancellationToken)
     {
         var value = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
+        var connect = startupConnectOptions;
         var meta = new Dictionary<string, object?>
         {
             ["serverName"] = value.ServerName,
@@ -548,6 +550,8 @@ public sealed partial class YggdrasilService(
             ["feature.enable_profile_key"] = value.EnableProfileKey,
             ["feature.username_check"] = value.UsernameCheck
         };
+        if (connect.Enabled)
+            meta["feature.openid_configuration_url"] = $"{connect.Issuer.TrimEnd('/')}/.well-known/openid-configuration";
 
         if (!string.IsNullOrWhiteSpace(value.HomepageUrl) || !string.IsNullOrWhiteSpace(value.RegisterUrl))
         {

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Renatus.Host.Data;
 using Renatus.Host.Entity;
+using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace Renatus.Host.Service;
 
@@ -30,12 +32,14 @@ public sealed class YggdrasilLifecycleService
         await LockUserAsync(dbContext, userId, cancellationToken);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM \"YggdrasilClients\" WHERE \"UserId\" = {userId} ORDER BY \"Id\" FOR UPDATE", cancellationToken);
-        return await dbContext.YggdrasilClients
+        var revoked = await dbContext.YggdrasilClients
             .Where(client => client.UserId == userId)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(client => client.Version, client => client.Version + 1)
                     .SetProperty(client => client.LastUsedAt, DateTimeOffset.UnixEpoch),
                 cancellationToken);
+        await RevokeConnectAuthorizationsAsync(dbContext, userId, cancellationToken);
+        return revoked;
     }
 
     /// <summary>After the caller locks the affected accounts, locks bound clients in PostgreSQL ID order before player mutation and revokes their versions; join snapshots also check the version.</summary>
@@ -44,14 +48,19 @@ public sealed class YggdrasilLifecycleService
         Guid playerId,
         CancellationToken cancellationToken)
     {
+        var userId = await dbContext.Players.Where(player => player.Id == playerId)
+            .Select(player => (Guid?)player.UserId).SingleOrDefaultAsync(cancellationToken);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM \"YggdrasilClients\" WHERE \"PlayerId\" = {playerId} ORDER BY \"Id\" FOR UPDATE", cancellationToken);
-        return await dbContext.YggdrasilClients
+        var revoked = await dbContext.YggdrasilClients
             .Where(client => client.PlayerId == playerId)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(client => client.Version, client => client.Version + 1)
                     .SetProperty(client => client.LastUsedAt, DateTimeOffset.UnixEpoch),
                 cancellationToken);
+        if (userId is not null)
+            await RevokeConnectAuthorizationsAsync(dbContext, userId.Value, cancellationToken);
+        return revoked;
     }
 
     /// <summary>Records a soft rename in the same database transaction as the player change without revoking the refresh window.</summary>
@@ -71,4 +80,15 @@ public sealed class YggdrasilLifecycleService
             .Select(activity => (DateTimeOffset?)activity.CreatedAt).MaxAsync(cancellationToken);
         return renamedAt?.ToUnixTimeMilliseconds();
     }
+
+    /// <summary>Hard-revokes every Connect grant for credential, deletion, transfer and remap boundaries while leaving rename refreshable.</summary>
+    public static Task<int> RevokeConnectAuthorizationsAsync(
+        AppDbContext dbContext,
+        Guid userId,
+        CancellationToken cancellationToken)
+        => dbContext.Set<OpenIddictEntityFrameworkCoreAuthorization>()
+            .Where(authorization => authorization.Subject == userId.ToString("D")
+                && authorization.Status == OpenIddictConstants.Statuses.Valid)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                authorization => authorization.Status, OpenIddictConstants.Statuses.Revoked), cancellationToken);
 }

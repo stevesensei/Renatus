@@ -13,5 +13,7 @@ public sealed class UnionOptions
     public int RequestTimeoutSeconds { get; set; } = 5;
     public bool OAuth2Enabled { get; set; }
     public string OAuth2SigningPrivateKeyPem { get; set; } = string.Empty;
+    public string OAuth2ConsentPath { get; set; } = "/union/oauth/consent";
+    public int OAuth2InteractionTtlSeconds { get; set; } = 600;
 }
 

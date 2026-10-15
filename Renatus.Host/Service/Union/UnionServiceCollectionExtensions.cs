@@ -18,6 +18,10 @@ public static class UnionServiceCollectionExtensions
         services.AddScoped<UnionSignatureVerifier>();
         services.AddScoped<UnionSignatureFilter>();
         services.AddScoped<UnionService>();
+        services.AddScoped<UnionUserService>();
+        services.AddScoped<UnionOAuthService>();
+        services.AddScoped<UnionBlacklistService>();
+        services.AddScoped<UnionActivityService>();
         services.AddHostedService<UnionSynchronizationWorker>();
         return services;
     }

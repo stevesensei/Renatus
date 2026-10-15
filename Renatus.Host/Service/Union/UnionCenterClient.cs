@@ -67,6 +67,108 @@ public sealed class UnionCenterClient(HttpClient httpClient, IHostEnvironment en
             HttpMethod.Get, options, string.Empty, null, false, cancellationToken);
     }
 
+    /// <summary>Reads the center-owned profile document for an already ownership-checked local Minecraft UUID.</summary>
+    public Task<JsonElement> GetProfileDetailAsync(UnionOptions options, Guid minecraftUuid, CancellationToken cancellationToken)
+    {
+        return SendJsonAsync<JsonElement>(HttpMethod.Get, options,
+            $"profile/detail/{minecraftUuid:N}", null, true, cancellationToken);
+    }
+
+    /// <summary>Reads same-name unbound profiles while preserving the center's extensible wire fields.</summary>
+    public Task<JsonElement> GetUnmappedProfilesByNameAsync(UnionOptions options, string name, CancellationToken cancellationToken)
+    {
+        return SendJsonAsync<JsonElement>(HttpMethod.Get, options,
+            $"profile/unmapped/byname/{Uri.EscapeDataString(name)}", null, true, cancellationToken);
+    }
+
+    /// <summary>Creates a center binding token for an owned local Minecraft UUID.</summary>
+    public Task<UnionBindTokenResponse> CreateBindTokenAsync(UnionOptions options, Guid minecraftUuid, CancellationToken cancellationToken)
+    {
+        return SendJsonBodyAsync<UnionBindTokenResponse>(HttpMethod.Post, options, "profile/bind",
+            new { uuid = minecraftUuid.ToString("N") }, true, cancellationToken);
+    }
+
+    /// <summary>Submits a binding token for an owned local Minecraft UUID.</summary>
+    public Task BindToAsync(UnionOptions options, Guid minecraftUuid, string token, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Post, options, "profile/bindto",
+            new { uuid = minecraftUuid.ToString("N"), token }, true, cancellationToken);
+    }
+
+    /// <summary>Removes the center binding for an owned local Minecraft UUID.</summary>
+    public Task UnbindAsync(UnionOptions options, Guid minecraftUuid, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Post, options, "profile/unbind",
+            new { uuid = minecraftUuid.ToString("N") }, true, cancellationToken);
+    }
+
+    /// <summary>Requests a center UUID remap from an owned local UUID to a selected mapped UUID.</summary>
+    public Task RequestRemapAsync(UnionOptions options, Guid minecraftUuid, Guid targetMinecraftUuid, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Post, options, "profile/remapuuid",
+            new { me = minecraftUuid.ToString("N"), target = targetMinecraftUuid.ToString("N") }, true, cancellationToken);
+    }
+
+    /// <summary>Resolves the member code and then reads its public center security level.</summary>
+    public async Task<int> GetSecurityLevelAsync(UnionOptions options, CancellationToken cancellationToken)
+    {
+        var codeResponse = await SendJsonBodyAsync<JsonElement>(HttpMethod.Post, options, "code",
+            new { token = options.MemberKey }, false, cancellationToken);
+        if (!codeResponse.TryGetProperty("code", out var codeElement)
+            || codeElement.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(codeElement.GetString()))
+        {
+            throw new UnionException(StatusCodes.Status502BadGateway, "Union center returned an invalid member code.");
+        }
+
+        var levelResponse = await SendJsonAsync<JsonElement>(HttpMethod.Get, options,
+            $"backend/{Uri.EscapeDataString(codeElement.GetString()!)}/security/level", null, false, cancellationToken);
+        if (levelResponse.ValueKind == JsonValueKind.Number && levelResponse.TryGetInt32(out var level))
+        {
+            return level;
+        }
+        if (levelResponse.ValueKind == JsonValueKind.Object
+            && levelResponse.TryGetProperty("level", out var nested)
+            && nested.TryGetInt32(out level))
+        {
+            return level;
+        }
+        throw new UnionException(StatusCodes.Status502BadGateway, "Union center returned an invalid security level.");
+    }
+
+    /// <summary>Returns the authoritative center blacklist page without inventing local pagination fields.</summary>
+    public Task<JsonElement> QueryBlacklistAsync(UnionOptions options, string query, int page, CancellationToken cancellationToken)
+    {
+        var path = $"blacklist/query?q={Uri.EscapeDataString(query)}&page={page}";
+        return SendJsonAsync<JsonElement>(HttpMethod.Get, options, path, null, true, cancellationToken);
+    }
+
+    /// <summary>Creates a remote blacklist row using the original center wire fields.</summary>
+    public Task CreateBlacklistEntryAsync(UnionOptions options, UnionBlacklistCreateRequest request, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Post, options, "blacklist/restful",
+            new { email = request.Email, reason = request.Reason }, true, cancellationToken);
+    }
+
+    /// <summary>Invalidates a positive remote blacklist row identifier.</summary>
+    public Task InvalidateBlacklistEntryAsync(UnionOptions options, long id, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Put, options, $"blacklist/invalidate/{id}", null, true, cancellationToken);
+    }
+
+    /// <summary>Deletes a positive remote blacklist row identifier.</summary>
+    public Task DeleteBlacklistEntryAsync(UnionOptions options, long id, CancellationToken cancellationToken)
+    {
+        return SendBodyAsync(HttpMethod.Delete, options, $"blacklist/restful/{id}", null, true, cancellationToken);
+    }
+
+    /// <summary>Fetches the Union web OAuth encryption key from the configured trusted center root without member credentials.</summary>
+    public Task<UnionOAuthBackendKeyResponse> GetOAuthBackendKeyAsync(UnionOptions options, CancellationToken cancellationToken)
+    {
+        return SendJsonAsync<UnionOAuthBackendKeyResponse>(HttpMethod.Get, options,
+            "oauth2/backend", null, false, cancellationToken);
+    }
+
     /// <summary>Restricts center URLs to HTTPS, or numeric loopback HTTP during development; credentials and URL suffixes are rejected.</summary>
     public Uri ValidateApiRoot(UnionOptions options)
     {
@@ -118,6 +220,45 @@ public sealed class UnionCenterClient(HttpClient httpClient, IHostEnvironment en
                 "Union center returned an invalid response.",
                 exception);
         }
+    }
+
+    private Task<T> SendJsonBodyAsync<T>(
+        HttpMethod method,
+        UnionOptions options,
+        string relativePath,
+        object body,
+        bool authenticate,
+        CancellationToken cancellationToken)
+    {
+        var content = JsonContent.Create(body, options: JsonOptions);
+        return SendJsonOwnedContentAsync<T>(method, options, relativePath, content, authenticate, cancellationToken);
+    }
+
+    private async Task<T> SendJsonOwnedContentAsync<T>(
+        HttpMethod method,
+        UnionOptions options,
+        string relativePath,
+        HttpContent content,
+        bool authenticate,
+        CancellationToken cancellationToken)
+    {
+        using (content)
+        {
+            return await SendJsonAsync<T>(method, options, relativePath, content, authenticate, cancellationToken);
+        }
+    }
+
+    private async Task SendBodyAsync(
+        HttpMethod method,
+        UnionOptions options,
+        string relativePath,
+        object? body,
+        bool authenticate,
+        CancellationToken cancellationToken)
+    {
+        using var content = body is null ? null : JsonContent.Create(body, options: JsonOptions);
+        using var response = await SendAsync(method, options, relativePath, content, authenticate, cancellationToken);
+        EnsureSuccess(response);
     }
 
     /// <summary>Applies one timeout to headers and the entire body, buffers at most 1 MiB, and never logs the member secret.</summary>

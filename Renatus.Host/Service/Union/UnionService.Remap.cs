@@ -8,7 +8,7 @@ namespace Renatus.Host.Service.Union;
 
 public sealed partial class UnionService
 {
-    /// <summary>Atomically remaps UUIDs through temporary values without changing REST IDs/FKs. Locks accounts, all their clients (including future refresh bindings), then players in database ID order; ownership/UUID changes reject the batch for caller retry. Bound clients are revoked before commit.</summary>
+    /// <summary>Atomically remaps UUIDs through temporary values without changing REST IDs/FKs. Locks accounts, clients, then players in database ID order; ownership/UUID changes reject the batch. Traditional clients and every affected owner's Connect grants are revoked before commit.</summary>
     public async Task ApplyRemapAsync(IReadOnlyDictionary<string, string>? remappedUuids, CancellationToken cancellationToken)
     {
         if (remappedUuids is null || remappedUuids.Count is 0 or > 1000)
@@ -78,6 +78,11 @@ public sealed partial class UnionService
                 await dbContext.YggdrasilClients.Where(client => client.PlayerId != null && playerIds.Contains(client.PlayerId.Value))
                     .ExecuteUpdateAsync(setters => setters.SetProperty(client => client.Version, client => client.Version + 1)
                         .SetProperty(client => client.LastUsedAt, DateTimeOffset.UnixEpoch), cancellationToken);
+                foreach (var userId in affectedPlayers.Select(player => player.UserId).Distinct())
+                {
+                    await YggdrasilLifecycleService.RevokeConnectAuthorizationsAsync(
+                        dbContext, userId, cancellationToken);
+                }
                 await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException exception)

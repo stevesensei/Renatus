@@ -69,6 +69,8 @@
     "Enabled": false,
     "Issuer": "",
     "SharedClientId": "",
+    "SharedClientRedirectUris": [],
+    "AllowImplicitFlow": false,
     "SigningPrivateKeyPem": "",
     "EncryptionPrivateKeyPem": "",
     "AccessTokenTtlSeconds": 3600,
