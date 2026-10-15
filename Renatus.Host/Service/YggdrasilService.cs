@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -20,7 +21,8 @@ public sealed partial class YggdrasilService(
     TextureService textureService,
     PlayerService playerService,
     IConnectionMultiplexer redis,
-    YggdrasilConnectOptions startupConnectOptions)
+    YggdrasilConnectOptions startupConnectOptions,
+    ILogger<YggdrasilService> logger)
 {
     private readonly IDatabase _database = redis.GetDatabase();
     #region Auth
@@ -30,7 +32,7 @@ public sealed partial class YggdrasilService(
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         EnsureAuthServerEnabled(options);
-        var (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
+        var (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "登录初次校验");
         if (user.Players.Count == 0)
         {
             throw new YggdrasilException(
@@ -42,8 +44,14 @@ public sealed partial class YggdrasilService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await lifecycleService.LockUserAsync(dbContext, lockedUserId, cancellationToken);
         dbContext.ChangeTracker.Clear();
-        (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
-        if (user.Id != lockedUserId) throw YggdrasilException.InvalidCredentials();
+        (user, selectedPlayer) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "登录加锁后复核");
+        if (user.Id != lockedUserId)
+        {
+            logger.LogWarning(
+                "Yggdrasil 登录失败：加锁后账户身份发生变化。登录标识={Login}，原账户ID={LockedUserId}，当前账户ID={UserId}，角色ID={PlayerId}，追踪ID={TraceId}",
+                JsonSerializer.Serialize(request.Username), lockedUserId, user.Id, selectedPlayer?.Id, Activity.Current?.Id);
+            throw YggdrasilException.InvalidCredentials();
+        }
         var clientToken = string.IsNullOrWhiteSpace(request.ClientToken)
             ? Guid.NewGuid().ToString("N")
             : request.ClientToken;
@@ -225,14 +233,20 @@ public sealed partial class YggdrasilService(
     {
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         EnsureAuthServerEnabled(options);
-        var (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
+        var (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "退出初次校验");
         await ApplyAuthenticationRateLimitAsync(user.Id, options);
         var lockedUserId = user.Id;
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await lifecycleService.LockUserAsync(dbContext, lockedUserId, cancellationToken);
         dbContext.ChangeTracker.Clear();
-        (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken);
-        if (user.Id != lockedUserId) throw YggdrasilException.InvalidCredentials();
+        (user, _) = await AuthenticateUserAsync(request.Username, request.Password, cancellationToken, "退出加锁后复核");
+        if (user.Id != lockedUserId)
+        {
+            logger.LogWarning(
+                "Yggdrasil 退出失败：加锁后账户身份发生变化。登录标识={Login}，原账户ID={LockedUserId}，当前账户ID={UserId}，追踪ID={TraceId}",
+                JsonSerializer.Serialize(request.Username), lockedUserId, user.Id, Activity.Current?.Id);
+            throw YggdrasilException.InvalidCredentials();
+        }
         await lifecycleService.RevokeUserClientsAsync(dbContext, user.Id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -241,7 +255,8 @@ public sealed partial class YggdrasilService(
     private async Task<(User User, Player? SelectedPlayer)> AuthenticateUserAsync(
         string login,
         string password,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string stage)
     {
         var normalizedLogin = YggdrasilFormat.Normalize(login);
         Player? selectedPlayer = await dbContext.Players
@@ -265,14 +280,30 @@ public sealed partial class YggdrasilService(
         }
 
         var unionOptions = await configurationService.GetUnionOptionsAsync(cancellationToken);
+        var passwordMethod = user?.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
         if (user is null || user.IsDisabled || (unionOptions.Enabled && user.EmailVerifiedAt is null))
         {
+            LogCredentialFailure(user is null ? "未找到账户" : user.IsDisabled ? "账户已禁用" : "Union 已启用但账户邮箱未验证");
             throw YggdrasilException.InvalidCredentials();
         }
 
-        var passwordMethod = user.AuthenticationMethods.FirstOrDefault(method => method.Type == AuthenticationMethodType.Password);
-        if (passwordMethod?.PasswordHash is null || !VerifyPassword(password, passwordMethod.PasswordHash))
+        if (passwordMethod?.PasswordHash is null)
         {
+            LogCredentialFailure(passwordMethod is null ? "账户未配置密码登录方式" : "密码登录方式缺少密码哈希");
+            throw YggdrasilException.InvalidCredentials();
+        }
+
+        try
+        {
+            if (!BCrypt.Net.BCrypt.Verify(password, passwordMethod.PasswordHash))
+            {
+                LogCredentialFailure("BCrypt 密码校验不匹配");
+                throw YggdrasilException.InvalidCredentials();
+            }
+        }
+        catch (BCrypt.Net.SaltParseException)
+        {
+            LogCredentialFailure("BCrypt 密码哈希格式无效或为不兼容的旧格式");
             throw YggdrasilException.InvalidCredentials();
         }
 
@@ -282,17 +313,22 @@ public sealed partial class YggdrasilService(
         }
 
         return (user, selectedPlayer);
-    }
 
-    private static bool VerifyPassword(string password, string passwordHash)
-    {
-        try
+        void LogCredentialFailure(string reason)
         {
-            return BCrypt.Net.BCrypt.Verify(password, passwordHash);
-        }
-        catch (BCrypt.Net.SaltParseException)
-        {
-            return false;
+            var matchSource = selectedPlayer is not null ? "角色名"
+                : user is null ? "未匹配"
+                : user.NormalizedUserName == normalizedLogin ? "用户名" : "邮箱";
+            logger.LogWarning(
+                "Yggdrasil 凭据校验失败：{Reason}。阶段={Stage}，追踪ID={TraceId}，登录标识={Login}，规范化标识={NormalizedLogin}，匹配方式={MatchSource}，"
+                + "账户ID={UserId}，用户名={UserName}，用户名匹配={UserNameMatches}，邮箱匹配={EmailMatches}，账户已禁用={IsDisabled}，"
+                + "Union已启用={UnionEnabled}，邮箱验证时间={EmailVerifiedAt}，角色数量={PlayerCount}，角色ID={PlayerId}，角色名={PlayerName}，MinecraftUUID={MinecraftUuid}，"
+                + "认证方式={AuthenticationMethods}，密码认证ID={PasswordMethodId}，存在密码哈希={HasPasswordHash}，密码哈希长度={PasswordHashLength}，输入密码长度={PasswordLength}",
+                reason, stage, Activity.Current?.Id, JsonSerializer.Serialize(login), JsonSerializer.Serialize(normalizedLogin), matchSource,
+                user?.Id, user?.UserName, user?.NormalizedUserName == normalizedLogin, user?.NormalizedEmail == normalizedLogin, user?.IsDisabled,
+                unionOptions.Enabled, user?.EmailVerifiedAt, user?.Players.Count, selectedPlayer?.Id, selectedPlayer?.Name, selectedPlayer?.MinecraftUuid,
+                user is null ? string.Empty : string.Join(",", user.AuthenticationMethods.Select(method => method.Type)),
+                passwordMethod?.Id, passwordMethod?.PasswordHash is not null, passwordMethod?.PasswordHash?.Length, password.Length);
         }
     }
 
