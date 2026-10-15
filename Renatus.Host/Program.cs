@@ -190,6 +190,7 @@ yggdrasilSigningKey.InitializeTexture(
 
 app.Use(async (context, next) =>
 {
+    context.Response.Headers.AccessControlAllowOrigin = "*";
     context.Response.Headers["X-Authlib-Injector-API-Location"] = "/api/yggdrasil/";
     await next(context);
 });

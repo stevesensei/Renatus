@@ -346,6 +346,8 @@ public sealed partial class YggdrasilService(
 
         if (client.Player is null || client.Player.MinecraftUuid != selectedProfileId)
         {
+            logger.LogInformation("传统 Yggdrasil join 拒绝：选中角色与令牌绑定UUID不符，选中UUID={SelectedUuid}，令牌角色UUID={BoundUuid}，追踪ID={TraceId}",
+                selectedProfileId, client.Player?.MinecraftUuid, Activity.Current?.Id);
             throw YggdrasilException.InvalidToken();
         }
 
@@ -360,9 +362,12 @@ public sealed partial class YggdrasilService(
             request.SelectedProfile,
             request.ServerId);
         await cacheService.SetAsync(key, entry, TimeSpan.FromSeconds(options.JoinSessionTtlSeconds), cancellationToken);
+        logger.LogInformation("传统 Yggdrasil join 已保存：角色名={PlayerName}，UUID={ProfileId}，服务器摘要={ServerHash}，有效期秒={TtlSeconds}，读取方式=一次性GETDEL，追踪ID={TraceId}",
+            JsonSerializer.Serialize(client.Player.Name), client.Player.MinecraftUuid,
+            YggdrasilFormat.Sha256Hex(request.ServerId), options.JoinSessionTtlSeconds, Activity.Current?.Id);
     }
 
-    /// <summary>Consumes the join once with Redis GETDEL, then reloads player/client state and rejects expiry, revocation, rename, remap, disable, deletion or transfer.</summary>
+    /// <summary>使用 GETDEL 一次性读取入服记录，复核数据库状态，并用中文 Info 日志记录未命中或首个拒绝原因。</summary>
     public async Task<SessionProfileResponse?> HasJoinedAsync(string username, string serverId, CancellationToken cancellationToken)
     {
         var key = JoinKey(username, serverId);
@@ -370,8 +375,12 @@ public sealed partial class YggdrasilService(
         var entry = cached.HasValue ? JsonSerializer.Deserialize<JoinSessionEntry>(cached.ToString()) : null;
         if (entry is null)
         {
+            logger.LogInformation("传统 Yggdrasil hasJoined 无登录记录：角色名={PlayerName}，服务器摘要={ServerHash}，缓存存在={CacheHit}；可能尚未join、已过期或已被读取，追踪ID={TraceId}",
+                JsonSerializer.Serialize(username), YggdrasilFormat.Sha256Hex(serverId), cached.HasValue, Activity.Current?.Id);
             return null;
         }
+        logger.LogInformation("传统 Yggdrasil hasJoined 已读取并删除登录记录：角色UUID={ProfileId}，服务器摘要={ServerHash}，追踪ID={TraceId}",
+            entry.MinecraftUuid, YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
 
         var player = await dbContext.Players
             .AsNoTracking()
@@ -386,22 +395,29 @@ public sealed partial class YggdrasilService(
             ? null
             : await lifecycleService.GetPlayerRenamedAtAsync(dbContext, player.Id, cancellationToken);
         var unionOptions = await configurationService.GetUnionOptionsAsync(cancellationToken);
-        if (player is null
-            || client is null
-            || client.User.IsDisabled
-            || (unionOptions.Enabled && client.User.EmailVerifiedAt is null)
-            || client.Version != entry.ClientVersion
-            || client.UserId != player.UserId
-            || client.PlayerId != player.Id
-            || player.MinecraftUuid != entry.MinecraftUuid
-            || YggdrasilFormat.ToUnsignedId(player.MinecraftUuid) != entry.ProfileId
-            || player.NormalizedName != YggdrasilFormat.Normalize(username)
-            || entry.ServerId != serverId
-            || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= entry.ExpiresAtMilliseconds
-            || renamedAt >= entry.IssuedAtMilliseconds)
+        string? rejectionReason = null;
+        if (player is null) rejectionReason = "角色不存在";
+        else if (client is null) rejectionReason = "客户端会话不存在";
+        else if (client.User.IsDisabled) rejectionReason = "账户已禁用";
+        else if (unionOptions.Enabled && client.User.EmailVerifiedAt is null) rejectionReason = "联盟启用但邮箱未验证";
+        else if (client.Version != entry.ClientVersion) rejectionReason = "令牌版本已变更";
+        else if (client.UserId != player.UserId) rejectionReason = "角色所有者已变更";
+        else if (client.PlayerId != player.Id) rejectionReason = "客户端选中角色已变更";
+        else if (player.MinecraftUuid != entry.MinecraftUuid) rejectionReason = "角色UUID已变更";
+        else if (YggdrasilFormat.ToUnsignedId(player.MinecraftUuid) != entry.ProfileId) rejectionReason = "选中UUID字符串与当前UUID不符";
+        else if (player.NormalizedName != YggdrasilFormat.Normalize(username)) rejectionReason = "查询名称与当前角色名称不符";
+        else if (entry.ServerId != serverId) rejectionReason = "服务器标识不符";
+        else if (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= entry.ExpiresAtMilliseconds) rejectionReason = "访问令牌已过期";
+        else if (renamedAt >= entry.IssuedAtMilliseconds) rejectionReason = "角色在令牌签发后改名";
+        if (player is null || rejectionReason is not null)
         {
+            logger.LogInformation("传统 Yggdrasil hasJoined 拒绝：原因={Reason}，查询角色名={PlayerName}，记录UUID={EntryUuid}，当前UUID={CurrentUuid}，服务器摘要={ServerHash}，追踪ID={TraceId}",
+                rejectionReason, JsonSerializer.Serialize(username), entry.MinecraftUuid, player?.MinecraftUuid,
+                YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
             return null;
         }
+        logger.LogInformation("传统 Yggdrasil hasJoined 校验通过：UUID={ProfileId}，服务器摘要={ServerHash}，追踪ID={TraceId}",
+            entry.MinecraftUuid, YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
 
         return BuildSessionProfile(player, false, await configurationService.GetYggdrasilOptionsAsync(cancellationToken));
     }
@@ -482,6 +498,8 @@ public sealed partial class YggdrasilService(
             .Include(entity => entity.CapeTexture)
             .FirstOrDefaultAsync(entity => entity.MinecraftUuid == minecraftUuid, cancellationToken);
 
+        logger.LogInformation("Yggdrasil 资料读取：查询UUID={ProfileId}，角色存在={Found}，需要签名={Signed}，追踪ID={TraceId}",
+            minecraftUuid, player is not null, !unsigned, Activity.Current?.Id);
         return player is null ? null : BuildSessionProfile(player, unsigned, options);
     }
 
@@ -532,6 +550,10 @@ public sealed partial class YggdrasilService(
                 uploadableValue,
                 unsigned ? null : signingKey.SignTextureValue(uploadableValue))
         };
+        logger.LogInformation("Yggdrasil 角色资料已生成：UUID={ProfileId}，角色名={PlayerName}，已签名={Signed}，材质类型={TextureTypes}，材质站点={TextureBaseUrl}，域名白名单={SkinDomains}，材质公钥摘要={KeyFingerprint}，追踪ID={TraceId}",
+            player.MinecraftUuid, JsonSerializer.Serialize(player.Name), !unsigned,
+            string.Join(",", textureMap.Keys), options.PublicBaseUrl, string.Join(",", options.SkinDomains),
+            YggdrasilFormat.Sha256Hex(signingKey.TexturePublicKeyPem), Activity.Current?.Id);
         return new SessionProfileResponse(
             YggdrasilFormat.ToUnsignedId(player.MinecraftUuid),
             player.Name,
@@ -598,11 +620,14 @@ public sealed partial class YggdrasilService(
             };
         }
 
+        var texturePublicKey = signingKey.TexturePublicKeyPem;
+        logger.LogInformation("Yggdrasil 元数据已生成：域名白名单={SkinDomains}，材质公钥摘要={KeyFingerprint}，追踪ID={TraceId}",
+            string.Join(",", value.SkinDomains), YggdrasilFormat.Sha256Hex(texturePublicKey), Activity.Current?.Id);
         return new
         {
             meta,
             skinDomains = value.SkinDomains,
-            signaturePublickey = signingKey.TexturePublicKeyPem
+            signaturePublickey = texturePublicKey
         };
     }
 

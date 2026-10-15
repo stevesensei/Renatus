@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Renatus.Host.Data;
+using Renatus.Host.Entity;
 using Renatus.Host.Service.Union;
 using Renatus.Host.Utils;
 
@@ -25,9 +26,17 @@ public sealed class UnionUserController(UnionUserService unionUserService) : Con
     public async Task<GlobalResponse<UnionSecurityLevelResponse>> SecurityLevel(CancellationToken cancellationToken) =>
         await ExecuteWithoutUserAsync(() => unionUserService.GetSecurityLevelAsync(cancellationToken));
 
+    /// <summary>临时限制仅管理员可生成主角色绑定令牌；普通用户仍可通过 bind 接口绑定到其他主角色。</summary>
     [HttpPost("profiles/{playerId:guid}/bind-token")]
-    public Task<GlobalResponse<UnionBindTokenResponse>> BindToken(Guid playerId, CancellationToken cancellationToken) =>
-        ExecuteAsync(userId => unionUserService.CreateBindTokenAsync(userId, playerId, cancellationToken));
+    public Task<GlobalResponse<UnionBindTokenResponse>> BindToken(Guid playerId, CancellationToken cancellationToken)
+    {
+        if (!User.IsInRole(nameof(UserRole.Admin)))
+        {
+            return Task.FromResult(GlobalResponse<UnionBindTokenResponse>.ResultError(message:
+                "因目前HLJUMC的union对接机制尚有bug，故暂时不允许本站作为主角色站，请绑定到诸如MUA等其他站"));
+        }
+        return ExecuteAsync(userId => unionUserService.CreateBindTokenAsync(userId, playerId, cancellationToken));
+    }
 
     [HttpPost("profiles/{playerId:guid}/bind")]
     public Task<GlobalResponse<object>> Bind(

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -80,12 +82,16 @@ public sealed partial class UnionService
     {
         if (string.IsNullOrWhiteSpace(username) || username.Length > 16)
         {
+            logger.LogInformation("Union 邮箱查询拒绝：角色名为空或长度超过16，名称长度={NameLength}，追踪ID={TraceId}",
+                username?.Length, Activity.Current?.Id);
             throw new UnionException(StatusCodes.Status400BadRequest, "Username is invalid.");
         }
         var normalized = YggdrasilFormat.Normalize(username);
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var email = await dbContext.Players.AsNoTracking().Where(player => player.NormalizedName == normalized)
             .Select(player => player.User.Email).SingleOrDefaultAsync(cancellationToken);
+        logger.LogInformation("Union 邮箱查询完成：角色名={PlayerName}，HTTP={StatusCode}，找到邮箱={Found}，追踪ID={TraceId}",
+            JsonSerializer.Serialize(username), email is null ? 204 : 200, email is not null, Activity.Current?.Id);
         return email is null ? null : new UnionEmailResponse(email);
     }
 

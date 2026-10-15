@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,8 @@ public sealed class ConnectSessionService(
     YggdrasilService yggdrasilService,
     TextureService textureService,
     PlayerService playerService,
-    IConnectionMultiplexer connectionMultiplexer)
+    IConnectionMultiplexer connectionMultiplexer,
+    ILogger<ConnectSessionService> logger)
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
 
@@ -29,33 +31,71 @@ public sealed class ConnectSessionService(
         var authorizationId = principal.GetAuthorizationId()
             ?? throw YggdrasilException.InvalidToken();
         var renamedAt = await lifecycleService.GetPlayerRenamedAtAsync(dbContext, player.Id, cancellationToken);
-        if (renamedAt >= issuedAt) throw YggdrasilException.InvalidToken();
+        if (renamedAt >= issuedAt)
+        {
+            logger.LogInformation("Connect join 拒绝：角色在令牌签发后改名，UUID={ProfileId}，追踪ID={TraceId}",
+                player.MinecraftUuid, Activity.Current?.Id);
+            throw YggdrasilException.InvalidToken();
+        }
         var options = await configurationService.GetYggdrasilOptionsAsync(cancellationToken);
         var entry = new ConnectJoinEntry(user.Id, player.Id, player.MinecraftUuid, authorizationId,
             issuedAt, request.SelectedProfile, request.ServerId);
         await _database.StringSetAsync(JoinKey(player.Name, request.ServerId),
             JsonSerializer.Serialize(entry), TimeSpan.FromSeconds(options.JoinSessionTtlSeconds));
+        logger.LogInformation("Connect join 已保存：角色名={PlayerName}，UUID={ProfileId}，服务器摘要={ServerHash}，有效期秒={TtlSeconds}，读取方式=一次性GETDEL，追踪ID={TraceId}",
+            JsonSerializer.Serialize(player.Name), player.MinecraftUuid, YggdrasilFormat.Sha256Hex(request.ServerId),
+            options.JoinSessionTtlSeconds, Activity.Current?.Id);
     }
 
-    /// <summary>Consumes one join snapshot and rechecks its live database grant, current ownership/UUID, and rename boundary before returning a profile.</summary>
+    /// <summary>一次性读取 Connect 入服记录，复核授权和角色状态，并记录缓存命中、拒绝原因与资料生成结果。</summary>
     public async Task<SessionProfileResponse?> HasJoinedAsync(
         string username,
         string serverId,
         CancellationToken cancellationToken)
     {
         var cached = await _database.StringGetDeleteAsync(JoinKey(username, serverId));
-        if (!cached.HasValue) return null;
+        if (!cached.HasValue)
+        {
+            logger.LogInformation("Connect hasJoined 无登录记录，将尝试传统 Yggdrasil：角色名={PlayerName}，服务器摘要={ServerHash}，追踪ID={TraceId}",
+                JsonSerializer.Serialize(username), YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
+            return null;
+        }
+        logger.LogInformation("Connect hasJoined 已读取并删除登录记录：服务器摘要={ServerHash}，追踪ID={TraceId}",
+            YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
         var entry = JsonSerializer.Deserialize<ConnectJoinEntry>(cached.ToString());
-        if (entry is null || entry.ServerId != serverId) return null;
-        if (!await IsActiveAuthorizationAsync(entry.AuthorizationId, entry.UserId, cancellationToken)) return null;
+        if (entry is null || entry.ServerId != serverId)
+        {
+            logger.LogInformation("Connect hasJoined 拒绝：登录记录为空或服务器标识不符，追踪ID={TraceId}", Activity.Current?.Id);
+            return null;
+        }
+        if (!await IsActiveAuthorizationAsync(entry.AuthorizationId, entry.UserId, cancellationToken))
+        {
+            logger.LogInformation("Connect hasJoined 拒绝：授权不存在、已撤销或不属于当前账户，UUID={ProfileId}，追踪ID={TraceId}",
+                entry.MinecraftUuid, Activity.Current?.Id);
+            return null;
+        }
         var player = await dbContext.Players.AsNoTracking().Include(entity => entity.User)
             .SingleOrDefaultAsync(entity => entity.Id == entry.PlayerId && entity.UserId == entry.UserId
                 && entity.MinecraftUuid == entry.MinecraftUuid && !entity.User.IsDisabled
                 && entity.User.EmailVerifiedAt != null, cancellationToken);
-        if (player is null || !string.Equals(player.Name, username, StringComparison.Ordinal)) return null;
+        if (player is null || !string.Equals(player.Name, username, StringComparison.Ordinal))
+        {
+            logger.LogInformation("Connect hasJoined 拒绝：原因={Reason}，查询角色名={PlayerName}，当前角色名={CurrentName}，记录UUID={ProfileId}，追踪ID={TraceId}",
+                player is null ? "角色不存在、所有者或UUID变更、账户禁用或邮箱未验证" : "查询名称与当前角色名称不符（区分大小写）",
+                JsonSerializer.Serialize(username), JsonSerializer.Serialize(player?.Name), entry.MinecraftUuid, Activity.Current?.Id);
+            return null;
+        }
         var renamedAt = await lifecycleService.GetPlayerRenamedAtAsync(dbContext, player.Id, cancellationToken);
-        if (renamedAt >= entry.IssuedAtMilliseconds) return null;
-        return await yggdrasilService.GetSessionProfileAsync(player.MinecraftUuid, false, cancellationToken);
+        if (renamedAt >= entry.IssuedAtMilliseconds)
+        {
+            logger.LogInformation("Connect hasJoined 拒绝：角色在令牌签发后改名，UUID={ProfileId}，追踪ID={TraceId}",
+                player.MinecraftUuid, Activity.Current?.Id);
+            return null;
+        }
+        var response = await yggdrasilService.GetSessionProfileAsync(player.MinecraftUuid, false, cancellationToken);
+        logger.LogInformation("Connect hasJoined 校验通过：UUID={ProfileId}，角色资料存在={Found}，服务器摘要={ServerHash}，追踪ID={TraceId}",
+            player.MinecraftUuid, response is not null, YggdrasilFormat.Sha256Hex(serverId), Activity.Current?.Id);
+        return response;
     }
 
     public async Task UploadTextureAsync(
